@@ -30,7 +30,7 @@ Edge Posture Monitor는 장시간 앉아서 작업하는 환경에서
 # 2. 시스템 구조
 
 전체 시스템은 다음과 같은 구조로 구성된다.
-
+```text
 Mobile App
      │
      │ WiFi (HTTP / WebSocket)
@@ -43,11 +43,11 @@ STM32 Sensor Node
      │
      ▼
 압력 센서 / ToF 센서 / 기타 센서
-
+```
 ---
 
 # 3. 데이터 처리 파이프라인
-
+```text
 Sensor Data
      │
      ▼
@@ -64,7 +64,7 @@ ReportGenerator
      │
      ▼
 SQLite Database
-
+```
 ---
 
 # 4. 주요 기능
