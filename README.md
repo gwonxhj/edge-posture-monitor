@@ -9,6 +9,25 @@
 
 ---
 
+![Python](https://img.shields.io/badge/python-3.10+-blue)
+![Platform](https://img.shields.io/badge/platform-RaspberryPi-green)
+![Database](https://img.shields.io/badge/database-SQLite-orange)
+![License](https://img.shields.io/badge/license-MIT-lightgrey)
+
+---
+
+## 프로젝트 특징
+
+이 프로젝트는 다음과 같은 특징을 가진다.
+
+- Embedded 시스템 기반 자세 분석
+- STM32 ↔ Raspberry Pi UART 통신
+- 실시간 자세 분류 파이프라인
+- SQLite 기반 자세 데이터 저장
+- Mock STM32 기반 테스트 환경 제공
+
+---
+
 # 1. 프로젝트 개요
 
 Edge Posture Monitor는 장시간 앉아서 작업하는 환경에서
@@ -30,40 +49,36 @@ Edge Posture Monitor는 장시간 앉아서 작업하는 환경에서
 # 2. 시스템 구조
 
 전체 시스템은 다음과 같은 구조로 구성된다.
-```text
-Mobile App
-     │
-     │ WiFi (HTTP / WebSocket)
-     ▼
-Raspberry Pi Controller
-     │
-     │ UART
-     ▼
-STM32 Sensor Node
-     │
-     ▼
-압력 센서 / ToF 센서 / 기타 센서
+
+```mermaid
+flowchart TD
+
+App[Mobile App] -->|WiFi / HTTP / WebSocket| RPi[Raspberry Pi Controller]
+
+RPi -->|UART| STM32[STM32 Sensor Node]
+
+STM32 --> Sensors[압력 센서 / ToF 센서 / 기타 센서]
 ```
 ---
 
 # 3. 데이터 처리 파이프라인
-```text
-Sensor Data
-     │
-     ▼
-SensorReceiver
-     │
-     ▼
-PostureClassifier
-     │
-     ▼
-PostureScoreEngine
-     │
-     ▼
-ReportGenerator
-     │
-     ▼
-SQLite Database
+
+센서 데이터는 다음과 같은 파이프라인을 통해 처리된다.
+
+```mermaid
+flowchart TD
+
+	Sensor[Sensor Data]
+
+	Sensor --> Receiver[SensorReceiver]
+
+	Receiver --> Classifier[PostureClassifier]
+
+	Classifier --> Score[PostureScoreEngine]
+
+	Score --> Report[ReportGenerator]
+
+	Report --> DB[(SQLite Database)]
 ```
 ---
 
@@ -125,9 +140,77 @@ STAND 감지 시
 - good_posture_ratio
 - bad_posture_ratio
 
+# 5. 기술 스택
+
+하드웨어
+
+- STM32
+- Raspberry Pi
+
+소프트웨어
+
+- Python
+- SQLite
+- UART 통신
+- WebSocket
+- HTTP API
+
 ---
 
-# 5. 데이터베이스 구조
+# 6. 실행 방법
+
+### 1. 저장소 클론
+
+```bash
+git clone https://github.com/username/edge-posture-monitor.git
+cd edge-posture-monitor
+```
+
+### 2. 의존성 설치
+
+```bash
+pip install -r requirements.txt
+```
+
+### 3. Mock STM32 실행
+
+```bash
+python -m tools.fake_stm32 --port /tmp/posture_stm32 --baud 115200
+```
+
+### 4. Raspberry Pi 서버 실행
+
+```bash
+POSTURE_UART_PORT=/tmp/posture_rpi \
+POSTURE_UART_MOCK=1 \
+POSTURE_UART_BAUD=115200 \
+python main_real.py
+```
+
+### 5. API 테스트
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+---
+
+# 7. API 인터페이스
+
+Raspberry Pi는 모바일 앱과 통신하기 위한 HTTP API를 제공한다.
+
+주요 엔드포인트
+  • GET  /health
+  • GET  /meta
+  • POST /command
+  • WS   /ws
+
+세부 명세는 아래 문서에 정리되어 있다.
+docs/api_spec.md
+
+
+
+# 8. 데이터베이스 구조
 
 시스템은 SQLite 데이터베이스를 사용한다.
 
@@ -158,38 +241,25 @@ daily_reports
 
 ---
 
-# 6. Mock 테스트 환경
+# 9. Mock 테스트 환경
 
 실제 STM32 하드웨어 없이 테스트할 수 있도록
 Fake STM32 환경이 제공된다.
 
 사용 파일
+```text
 tools/fake_stm32.py
+```
 
 이를 통해 다음 기능을 테스트할 수 있다.
-	•	UART 통신
-	•	자세 분석 로직
-	•	리포트 생성
-	•	데이터베이스 저장
+- UART 통신
+- 자세 분석 로직
+- 리포트 생성
+- 데이터베이스 저장
 
 ---
 
-# 7. API 인터페이스
-
-Raspberry Pi는 모바일 앱과 통신하기 위한 HTTP API를 제공한다.
-
-주요 엔드포인트
-  • GET  /health
-  • GET  /meta
-  • POST /command
-  • WS   /ws
-
-세부 명세는 아래 문서에 정리되어 있다.
-docs/api_spec.md
-
----
-
-# 8. 문서
+# 10. 문서
 
 프로젝트 관련 상세 문서는 docs 폴더에 정리되어 있다.
   • docs/system_architecture.md
@@ -198,24 +268,7 @@ docs/api_spec.md
 
 ---
 
-# 9. 기술 스택
-
-하드웨어
-
-- STM32
-- Raspberry Pi
-
-소프트웨어
-
-- Python
-- SQLite
-- UART 통신
-- WebSocket
-- HTTP API
-
----
-
-# 10. 향후 개발 계획
+# 11. 향후 개발 계획
 
 - 실제 센서 하드웨어 연동
 - 모바일 앱 UI 개발
@@ -224,9 +277,8 @@ docs/api_spec.md
 
 ---
 
-# 11. 개발자
+# 12. 개발자
 
 권혁준
 
 AI / Embedded Systems
-
