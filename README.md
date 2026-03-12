@@ -1,11 +1,9 @@
 # Edge AI Posture Monitoring System
 
-Real-time posture monitoring system using STM32 sensors and Raspberry Pi edge processing.
+STM32 센서와 Raspberry Pi 엣지 처리 기반의 실시간 자세 모니터링 시스템
 
-센서 기반 자세 분석 시스템 (Edge AI 기반 자세 모니터링 시스템)
-
-이 프로젝트는 사용자의 앉은 자세를 실시간으로 분석하고,
-자세 점수 및 자세 리포트를 생성하는 스마트 자세 모니터링 시스템이다.
+센서 데이터를 기반으로 사용자의 앉은 자세를 실시간으로 분석하고,
+자세 점수 및 자세 리포트를 생성하는 Edge AI 기반 자세 모니터링 시스템이다.
 
 센서 데이터는 STM32에서 수집되며 Raspberry Pi에서 자세 분석 및 리포트 생성을 수행한다.
 
@@ -22,6 +20,9 @@ Real-time posture monitoring system using STM32 sensors and Raspberry Pi edge pr
 ## 프로젝트 특징
 
 이 프로젝트는 다음과 같은 특징을 가진다.
+
+이 프로젝트는 실제 하드웨어 없이 시스템을 검증할 수 있는
+Mock STM32 기반 테스트 환경과 체계적인 시스템 테스트 체크리스트를 포함한다.
 
 - Embedded 시스템 기반 자세 분석
 - STM32 ↔ Raspberry Pi UART 통신
