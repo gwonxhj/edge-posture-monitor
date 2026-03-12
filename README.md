@@ -13,6 +13,7 @@
 ![Platform](https://img.shields.io/badge/platform-RaspberryPi-green)
 ![Database](https://img.shields.io/badge/database-SQLite-orange)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
+![GitHub stars](https://img.shields.io/github/stars/gwonxhj/edge-posture-monitor)
 
 ---
 
