@@ -26,24 +26,7 @@
 - SQLite 기반 자세 데이터 저장
 - Mock STM32 기반 테스트 환경 제공
 
-## 시스템 데모
 
-### 센서 데이터 수신
-
-UART를 통해 STM32에서 센서 데이터를 수신한다.
-
-### 자세 분석 결과
-
-실시간 자세 분류 결과가 생성된다.
-
-### 리포트 생성
-
-측정 종료 후 다음과 같은 리포트가 생성된다.
-
-- 평균 자세 점수
-- 총 착석 시간
-- 주요 자세 유형
-- 자세 비율 분석
 
 ---
 
@@ -71,16 +54,56 @@ Edge Posture Monitor는 장시간 앉아서 작업하는 환경에서
 
 ```mermaid
 flowchart TD
+    App[Mobile App]
+    RPi[Raspberry Pi Controller]
+    STM32[STM32 Sensor Node]
+    Sensors[Pressure / ToF / IMU Sensors]
 
-App[Mobile App] -->|WiFi / HTTP / WebSocket| RPi[Raspberry Pi Controller]
-
-RPi -->|UART| STM32[STM32 Sensor Node]
-
-STM32 --> Sensors[압력 센서 / ToF 센서 / 기타 센서]
+    App -->|WiFi / HTTP / WebSocket| RPi
+    RPi -->|UART| STM32
+    STM32 -->|Sensor Input| Sensors
 ```
 ---
 
-# 3. 데이터 처리 파이프라인
+# 3. Runtime 상태 흐름
+
+시스템은 다음과 같은 상태 흐름으로 동작한다.
+
+```mermaid
+flowchart TD
+    BOOT[boot_completed]
+    UART[uart_link_ready]
+    PROFILE[profile_loaded]
+    CAL_DECISION[wait_calibration_decision]
+    WAIT_SIT_CAL[wait_sit_for_calibration]
+    CALIBRATING[calibrating]
+    CAL_DONE[calibration_completed]
+    START_DECISION[wait_start_decision]
+    WAIT_SIT_MEASURE[wait_sit_for_measure]
+    MEASURING[measuring]
+    RESTART[wait_restart_decision]
+    STOP_REQ[measurement_stop_requested]
+    SAVED[session_saved]
+
+    BOOT --> UART
+    UART --> PROFILE
+    PROFILE --> CAL_DECISION
+    CAL_DECISION --> WAIT_SIT_CAL
+    WAIT_SIT_CAL --> CALIBRATING
+    CALIBRATING --> CAL_DONE
+    CAL_DECISION --> START_DECISION
+    CAL_DONE --> START_DECISION
+    START_DECISION --> WAIT_SIT_MEASURE
+    WAIT_SIT_MEASURE --> MEASURING
+    MEASURING --> RESTART
+    RESTART --> WAIT_SIT_MEASURE
+    RESTART --> STOP_REQ
+    MEASURING --> STOP_REQ
+    STOP_REQ --> SAVED
+```
+---
+
+# 4. 데이터 처리 파이프라인
 
 센서 데이터는 다음과 같은 파이프라인을 통해 처리된다.
 
@@ -101,7 +124,7 @@ flowchart TD
 ```
 ---
 
-# 4. 주요 기능
+# 5. 주요 기능
 
 ## 실시간 자세 감지
 
@@ -161,7 +184,30 @@ STAND 감지 시
 - good_posture_ratio
 - bad_posture_ratio
 
-# 5. 기술 스택
+---
+
+# 6. 시스템 데모
+
+## 센서 데이터 수신
+
+UART를 통해 STM32에서 센서 데이터를 수신한다.
+
+## 자세 분석 결과
+
+실시간 자세 분류 결과가 생성된다.
+
+## 리포트 생성
+
+측정 종료 후 다음과 같은 리포트가 생성된다.
+
+- 평균 자세 점수
+- 총 착석 시간
+- 주요 자세 유형
+- 자세 비율 분석
+
+---
+
+# 7. 기술 스택
 
 하드웨어
 
@@ -178,28 +224,28 @@ STAND 감지 시
 
 ---
 
-# 6. 실행 방법
+# 8. 실행 방법
 
-### 1. 저장소 클론
+## 1. 저장소 클론
 
 ```bash
 git clone https://github.com/username/edge-posture-monitor.git
 cd edge-posture-monitor
 ```
 
-### 2. 의존성 설치
+## 2. 의존성 설치
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Mock STM32 실행
+## 3. Mock STM32 실행
 
 ```bash
 python -m tools.fake_stm32 --port /tmp/posture_stm32 --baud 115200
 ```
 
-### 4. Raspberry Pi 서버 실행
+## 4. Raspberry Pi 서버 실행
 
 ```bash
 POSTURE_UART_PORT=/tmp/posture_rpi \
@@ -208,7 +254,7 @@ POSTURE_UART_BAUD=115200 \
 python main_real.py
 ```
 
-### 5. API 테스트
+## 5. API 테스트
 
 ```bash
 curl http://127.0.0.1:8000/health
@@ -216,22 +262,22 @@ curl http://127.0.0.1:8000/health
 
 ---
 
-# 7. API 인터페이스
+# 9. API 인터페이스
 
 Raspberry Pi는 모바일 앱과 통신하기 위한 HTTP API를 제공한다.
 
 주요 엔드포인트
-  • GET  /health
-  • GET  /meta
-  • POST /command
-  • WS   /ws
+- GET  /health
+- GET  /meta
+- POST /command
+- WS   /ws
 
 세부 명세는 아래 문서에 정리되어 있다.
-docs/api_spec.md
+- docs/api_spec.md
 
 
 
-# 8. 데이터베이스 구조
+# 10. 데이터베이스 구조
 
 시스템은 SQLite 데이터베이스를 사용한다.
 
@@ -245,24 +291,24 @@ docs/api_spec.md
 
 각 테이블의 역할
 
-users  
-사용자 프로필 정보 저장
+- users  
+ : 사용자 프로필 정보 저장
 
-baselines  
-사용자 자세 기준값 저장
+- baselines  
+ : 사용자 자세 기준값 저장
 
-sessions  
-측정 세션 기록
+- sessions  
+ : 측정 세션 기록
 
-minute_reports  
-분 단위 자세 분석 결과
+- minute_reports  
+ : 분 단위 자세 분석 결과
 
-daily_reports  
-하루 단위 자세 분석 결과
+- daily_reports  
+ : 하루 단위 자세 분석 결과
 
 ---
 
-# 9. Mock 테스트 환경
+# 11. Mock 테스트 환경
 
 실제 STM32 하드웨어 없이 테스트할 수 있도록
 Fake STM32 환경이 제공된다.
@@ -280,7 +326,7 @@ tools/fake_stm32.py
 
 ---
 
-# 10. 문서
+# 12. 문서
 
 프로젝트 관련 상세 문서는 docs 폴더에 정리되어 있다.
 - docs/system_architecture.md
@@ -289,7 +335,7 @@ tools/fake_stm32.py
 
 ---
 
-# 11. 향후 개발 계획
+# 13. 향후 개발 계획
 
 - 실제 센서 하드웨어 연동
 - 모바일 앱 UI 개발
@@ -298,7 +344,7 @@ tools/fake_stm32.py
 
 ---
 
-# 12. 개발자
+# 14. 개발자
 
 권혁준
 
