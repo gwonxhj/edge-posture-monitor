@@ -25,8 +25,8 @@
 - 실시간 자세 분류 파이프라인
 - SQLite 기반 자세 데이터 저장
 - Mock STM32 기반 테스트 환경 제공
-
-
+- pause / resume / quit 기반 측정 세션 상태 관리
+- STAND 이벤트 기반 재측정 / 종료 분기 처리
 
 ---
 
@@ -81,6 +81,7 @@ flowchart TD
     START_DECISION[wait_start_decision]
     WAIT_SIT_MEASURE[wait_sit_for_measure]
     MEASURING[measuring]
+    PAUSED[paused]
     RESTART[wait_restart_decision]
     STOP_REQ[measurement_stop_requested]
     SAVED[session_saved]
@@ -95,6 +96,9 @@ flowchart TD
     CAL_DONE --> START_DECISION
     START_DECISION --> WAIT_SIT_MEASURE
     WAIT_SIT_MEASURE --> MEASURING
+    MEASURING --> PAUSED
+    PAUSED --> WAIT_SIT_MEASURE
+    PAUSED --> STOP_REQ
     MEASURING --> RESTART
     RESTART --> WAIT_SIT_MEASURE
     RESTART --> STOP_REQ
@@ -161,10 +165,10 @@ flowchart TD
 
 STAND 감지 시
 
-- 측정 자동 중지
-- 재측정 여부 선택 가능
-- STAND 감지 후 재측정을 거부하면 세션은 종료
-- 측정 중 직접 중지 시에는 STM32에 STOP 명령이 전달됨
+- STM32가 STAND를 감지하면 측정은 중단되고 idle 상태로 전환된다.
+- 앱은 사용자에게 재측정 여부를 묻는다.
+- 사용자가 재개를 선택하면 착석 확인 후 측정을 이어서 진행한다.
+- 사용자가 종료를 선택하면 현재까지 누적된 데이터를 저장하고 세션을 종료한다.
 
 ---
 
@@ -186,7 +190,7 @@ STAND 감지 시
 
 ---
 
-# 6. 시스템 데모
+# 6. 동작 결과
 
 ## 센서 데이터 수신
 
@@ -324,6 +328,8 @@ tools/fake_stm32.py
 - 자세 분석 로직
 - 리포트 생성
 - 데이터베이스 저장
+- pause / resume / quit 제어 흐름
+- STAND 이후 재측정 / 종료 흐름
 
 ---
 
