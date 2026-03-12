@@ -1,19 +1,22 @@
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-
-.env
-venv/
-.venv/
-
-*.db
-*.sqlite
-*.sqlite3
-
+# macOS
 .DS_Store
 
-# data files
+# Python
+__pycache__/
+*.pyc
+
+# virtual env
+venv/
+.env/
+
+# database
+*.db
+*.sqlite3
+
+# logs
+*.log
+
+# data directory
 data/raw/*
 data/processed/*
 !data/README.md
