@@ -5,7 +5,7 @@
 이 프로젝트는 사용자의 앉은 자세를 실시간으로 분석하고,
 자세 점수 및 자세 리포트를 생성하는 스마트 자세 모니터링 시스템이다.
 
-센서 데이터는 STM32에서 수집되며 Raspberry Pi에서 분석을 수행한다.
+센서 데이터는 STM32에서 수집되며 Raspberry Pi에서 자세 분석 및 리포트 생성을 수행한다.
 
 ---
 
@@ -267,13 +267,14 @@ curl http://127.0.0.1:8000/health
 Raspberry Pi는 모바일 앱과 통신하기 위한 HTTP API를 제공한다.
 
 주요 엔드포인트
-- GET  /health
-- GET  /meta
-- POST /command
-- WS   /ws
+
+- `GET  /health`
+- `GET  /meta`
+- `POST /command`
+- `WS   /ws`
 
 세부 명세는 아래 문서에 정리되어 있다.
-- docs/api_spec.md
+- `docs/api_spec.md`
 
 
 
