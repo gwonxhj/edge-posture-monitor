@@ -12,3 +12,8 @@ venv/
 *.sqlite3
 
 .DS_Store
+
+# data files
+data/raw/*
+data/processed/*
+!data/README.md
