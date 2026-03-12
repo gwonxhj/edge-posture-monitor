@@ -18,6 +18,16 @@
 - length: 2 bytes
 - payload: variable
 
+### Packet Types
+```text
+| Type | Description |
+|-----|-------------|
+| 0x01 | Sensor Data Packet |
+| 0x02 | STAND Event |
+| 0x03 | SIT Event |
+| 0x04 | System Status |
+```
+
 ### Payload Fields
 - seq: uint16
 - timestamp: uint32
@@ -44,6 +54,19 @@
 
 - crc16: uint16 (추후 추가/고정)
 
+### Payload Size
+
+센서 데이터 패킷의 예상 크기
+
+- seq: 2 bytes
+- timestamp: 4 bytes
+- loadcells: 8 bytes
+- IMU acc: 6 bytes
+- IMU gyro: 6 bytes
+- ToF sensors: 12 bytes
+
+Total payload ≈ 38 bytes
+
 ---
 
 ## RPi -> STM32 Command Packet
@@ -64,6 +87,46 @@
 - 0x04: buzzer long
 - 0x05: start calibration
 - 0x06: set mode
+
+### Command Payload
+```text
+| Command | Payload |
+|-------|--------|
+| vibration on | none |
+| vibration off | none |
+| buzzer short | none |
+| buzzer long | none |
+| start calibration | none |
+| set mode | uint8 mode_id |
+```
+---
+
+## Example Sensor Packet
+
+Example (hex)
+
+AA 55
+01
+26 00
+01 00
+12 34 56 78
+10 00 12 00 11 00 10 00
+05 00 02 00 FF 00
+03 00 04 00 05 00 02 00 01 00 07 00
+AB CD
+
+---
+
+## Error Handling
+
+다음 조건에서 패킷을 폐기한다.
+
+- header mismatch
+- payload length mismatch
+- CRC mismatch
+- sequence jump
+
+RPi는 sequence number를 기반으로 packet loss를 감지할 수 있다.
 
 ---
 
