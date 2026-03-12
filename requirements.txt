@@ -1,8 +1,7 @@
-numpy
-pandas
-scikit-learn
-joblib
-pyserial
-uvicorn[standard]
-fastapi
-bluezero
+fastapi>=0.110
+uvicorn[standard]>=0.27
+pyserial>=3.5
+numpy>=1.24
+pandas>=2.0
+scikit-learn>=1.3
+joblib>=1.3

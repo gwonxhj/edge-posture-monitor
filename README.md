@@ -1,5 +1,7 @@
 # Edge AI Posture Monitoring System
 
+Real-time posture monitoring system using STM32 sensors and Raspberry Pi edge processing.
+
 센서 기반 자세 분석 시스템 (Edge AI 기반 자세 모니터링 시스템)
 
 이 프로젝트는 사용자의 앉은 자세를 실시간으로 분석하고,
@@ -25,7 +27,7 @@
 - STM32 ↔ Raspberry Pi UART 통신
 - 실시간 자세 분류 파이프라인
 - SQLite 기반 자세 데이터 저장
-- Mock STM32 기반 테스트 환경 제공
+- Mock STM32 기반 테스트 환경 제공 (hardware-independent testing)
 - pause / resume / quit 기반 측정 세션 상태 관리
 - STAND 이벤트 기반 재측정 / 종료 분기 처리
 
@@ -222,6 +224,7 @@ UART를 통해 STM32에서 센서 데이터를 수신한다.
 소프트웨어
 
 - Python
+- FastAPI
 - SQLite
 - UART 통신
 - WebSocket
@@ -234,7 +237,7 @@ UART를 통해 STM32에서 센서 데이터를 수신한다.
 ## 1. 저장소 클론
 
 ```bash
-git clone https://github.com/username/edge-posture-monitor.git
+git clone https://github.com/gwonxhj/edge-posture-monitor.git
 cd edge-posture-monitor
 ```
 
@@ -357,3 +360,34 @@ tools/fake_stm32.py
 권혁준
 
 AI / Embedded Systems
+
+---
+
+# 15. 프로젝트 구조
+```text
+edge-posture-monitor
+│
+├ docs
+│   ├ api_spec.md
+│   ├ system_architecture.md
+│   └ test_checklist.md
+│
+├ src
+│   ├ communication
+│   ├ sensor
+│   ├ core
+│   ├ runtime
+│   ├ report
+│   └ storage
+│
+├ tools
+│   └ fake_stm32.py
+│
+├ data
+├ models
+├ profiles
+│
+├ main_real.py
+├ requirements.txt
+└ README.md
+```
