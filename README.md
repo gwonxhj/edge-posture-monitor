@@ -283,9 +283,9 @@ tools/fake_stm32.py
 # 10. 문서
 
 프로젝트 관련 상세 문서는 docs 폴더에 정리되어 있다.
-  • docs/system_architecture.md
-  • docs/api_spec.md
-  • docs/test_checklist.md
+- docs/system_architecture.md
+- docs/api_spec.md
+- docs/test_checklist.md
 
 ---
 
