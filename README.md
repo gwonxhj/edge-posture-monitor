@@ -1,4 +1,4 @@
-# Edge Posture Monitor
+# Edge AI Posture Monitoring System
 
 센서 기반 자세 분석 시스템 (Edge AI 기반 자세 모니터링 시스템)
 
