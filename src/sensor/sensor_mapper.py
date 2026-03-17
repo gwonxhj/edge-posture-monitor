@@ -30,11 +30,14 @@ def _safe_mean(values):
 
 def _build_head_summary(tof_3d):
     """
-    32개 3D ToF를 단순 summary로 축약.
-    지금 단계에서는 16/16으로 좌우 반을 나누는 단순 방식 사용.
+    32개 3D ToF를 summary로 축약.
+
+    패킷 순서 계약:
+    - tof_3d[0:16]   : 착석 기준 우측 목 센서 4x4
+    - tof_3d[16:32]  : 착석 기준 좌측 목 센서 4x4
     """
-    left_half = tof_3d[:16]
-    right_half = tof_3d[16:]
+    right_half = tof_3d[:16]
+    left_half = tof_3d[16:]
 
     left_mean = _safe_mean(left_half)
     right_mean = _safe_mean(right_half)

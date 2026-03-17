@@ -14,6 +14,13 @@ def parse_sensor_packet(data_packet: bytes):
     data_packet must be exactly 128 bytes
     format: <4s 12i 4H 32H 2h
     """
+    expected_size = struct.calcsize(UNPACK_FORMAT)
+    if expected_size != SENSOR_PACKET_DATA_SIZE:
+        raise ValueError(
+            f"UNPACK_FORMAT size mismatch: calcsize={expected_size}, "
+            f"expected={SENSOR_PACKET_DATA_SIZE}"
+        )
+
     if len(data_packet) != SENSOR_PACKET_DATA_SIZE:
         raise ValueError(
             f"Invalid data packet size: expected {SENSOR_PACKET_DATA_SIZE}, got {len(data_packet)}"
@@ -33,10 +40,10 @@ def parse_sensor_packet(data_packet: bytes):
     mpu = list(unpacked[49:51])
 
     return {
-        "frame_type": frame_type,               # "DAT" or "CAL"
+        "frame_type": frame_type,
         "received_at_ms": int(time.time() * 1000),
-        "loadcell": loadcell,                   # len 12
-        "tof_1d": tof_1d,                       # len 4
-        "tof_3d": tof_3d,                       # len 32
-        "mpu": mpu,                             # len 2
+        "loadcell": loadcell,
+        "tof_1d": tof_1d,
+        "tof_3d": tof_3d,
+        "mpu": mpu,
     }

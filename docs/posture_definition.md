@@ -1,8 +1,8 @@
-normal
-turtle_neck
-forward_lean
-reclined
-side_slouch
-leg_cross
-thinking_pose
-perching
+- normal
+- turtle_neck
+- forward_lean
+- reclined
+- side_slouch
+- leg_cross
+- thinking_pose
+- perching
