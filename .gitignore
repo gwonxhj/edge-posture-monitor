@@ -20,3 +20,6 @@ venv/
 data/raw/*
 data/processed/*
 !data/README.md
+
+sample_logs/
+*.csv

@@ -134,6 +134,12 @@ def run_measurement_loop(
         if raw_packet is None:
             continue
 
+        if receiver.checksum_fail_count > 0 and receiver.checksum_fail_count % 50 == 0:
+            print(f"[WARN] checksum_fail_count={receiver.checksum_fail_count}")
+
+        if receiver.parse_fail_count > 0 and receiver.parse_fail_count % 20 == 0:
+            print(f"[WARN] parse_fail_count={receiver.parse_fail_count}")
+
         if raw_packet.get("frame_type") == "EVENT":
             if raw_packet.get("event") == "STAND":
                 print("[UART] STAND 이벤트 감지")
