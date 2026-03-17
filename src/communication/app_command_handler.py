@@ -46,7 +46,10 @@ ALLOWED_STAGE_BY_COMMAND = {
         S.PROFILE_LOADED,
         S.WAIT_CALIBRATION_DECISION,
         S.CALIBRATION_COMPLETED,
+        S.WAIT_START_DECISION,
         S.SESSION_SAVED,
+        S.MEASURING,
+        S.PAUSED,
     ],
     "resume_measurement": [
         S.PAUSED,
@@ -194,6 +197,7 @@ def handle_app_command(cmd: dict, session_manager, db_manager, app_server):
 
         app_server.update_meta({
             "stage": S.WAIT_SIT_FOR_CALIBRATION,
+            "calibration_reason": "initial",
         })
 
         return {
@@ -307,6 +311,7 @@ def handle_app_command(cmd: dict, session_manager, db_manager, app_server):
 
         app_server.update_meta({
             "stage": S.WAIT_SIT_FOR_CALIBRATION,
+            "calibration_reason": "recalibration",
         })
 
         return {

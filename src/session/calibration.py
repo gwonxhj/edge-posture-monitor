@@ -50,8 +50,11 @@ class CalibrationManager:
             print(f"[Calibration] Start: collecting {required_samples} samples...")
 
         while self.collected_count < required_samples:
-            raw_packet = receiver.read_real_sensor()
+            raw_packet = receiver.read_sensor_packet()
             if raw_packet is None:
+                continue
+
+            if raw_packet.get("frame_type") != "CAL":
                 continue
 
             semantic_packet = mapper_func(raw_packet)

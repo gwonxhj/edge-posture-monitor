@@ -107,7 +107,7 @@ def wait_for_resume_or_quit_command(app_server, session_manager, db_manager):
     app_server.update_meta({
         "stage": S.PAUSED,
     })
-    print("[APP] 일시정지 상태, 재개/종료 command 대기 중...")
+    print("[APP] 일시정지 상태, 재개/종료/재캘리브레이션 command 대기 중...")
 
     while True:
         cmd = app_server.get_next_command()
@@ -127,3 +127,6 @@ def wait_for_resume_or_quit_command(app_server, session_manager, db_manager):
 
         if result["action"] == "quit_measurement":
             return "quit"
+        
+        if result["action"] == "start_calibration":
+            return "recalibration"

@@ -1,3 +1,5 @@
+# src/core/feature_extractor.py
+
 def extract_features(packet, baseline=None):
     loadcell = packet["loadcell"]
     tof = packet["tof"]
@@ -28,7 +30,6 @@ def extract_features(packet, baseline=None):
 
     # -----------------------------
     # Loadcell: seat
-    # rear = 8/10, front = 9/11
     # -----------------------------
     sr_rear = loadcell["seat_right"]["rear"]
     sr_front = loadcell["seat_right"]["front"]
@@ -48,13 +49,11 @@ def extract_features(packet, baseline=None):
     seat_fb_shift = (seat_front_total - seat_rear_total) / seat_total
 
     # -----------------------------
-    # ToF: neck
+    # ToF: head summary (기존 neck 역할 대체)
     # -----------------------------
-    neck_right = tof["neck"]["right"]
-    neck_left = tof["neck"]["left"]
-
-    neck_mean = (neck_right + neck_left) / 2.0
-    neck_lr_diff = abs(neck_right - neck_left)
+    head_summary = tof["head_summary"]
+    neck_mean = head_summary["mean"]
+    neck_lr_diff = head_summary["lr_diff"]
 
     # -----------------------------
     # ToF: spine
@@ -76,19 +75,19 @@ def extract_features(packet, baseline=None):
     neck_forward_delta = neck_mean - spine_mid_avg
 
     # -----------------------------
-    # IMU
+    # IMU: pitch only
     # -----------------------------
-    gyro_x_filt = imu["gyro_x_filt"]
-    gyro_y_filt = imu["gyro_y_filt"]
-    gyro_z_filt = imu["gyro_z_filt"]
-    tilt_est = imu["tilt_est"]
+    right_pitch_deg = imu["right_pitch_deg"]
+    left_pitch_deg = imu["left_pitch_deg"]
+    pitch_fused_deg = imu["pitch_fused_deg"]
+    pitch_lr_diff_deg = imu["pitch_lr_diff_deg"]
 
-    motion_level = (
-        abs(gyro_x_filt) + abs(gyro_y_filt) + abs(gyro_z_filt)
-    ) / 3.0
+    imu_motion_proxy = (abs(right_pitch_deg) + abs(left_pitch_deg)) / 2.0
 
     # -----------------------------
-    # classifier 입력용 feature 순서 유지
+    # classifier 입력용 feature 순서 유지(18개 유지)
+    # 기존 gyro_y_filt / tilt_est / motion_level 자리를
+    # pitch_fused_deg / pitch_lr_diff_deg / imu_motion_proxy로 대체
     # -----------------------------
     features = [
         back_lr_diff,             # 0
@@ -100,9 +99,9 @@ def extract_features(packet, baseline=None):
         spine_curve,              # 6
         spine_variation,          # 7
         neck_forward_delta,       # 8
-        gyro_y_filt,              # 9
-        tilt_est,                 # 10
-        motion_level,             # 11
+        pitch_fused_deg,          # 9
+        pitch_lr_diff_deg,        # 10
+        imu_motion_proxy,         # 11
         back_right_total,         # 12
         back_left_total,          # 13
         seat_right_total,         # 14
@@ -121,9 +120,9 @@ def extract_features(packet, baseline=None):
         "spine_curve": spine_curve,
         "spine_variation": spine_variation,
         "neck_forward_delta": neck_forward_delta,
-        "gyro_y_filt": gyro_y_filt,
-        "tilt_est": tilt_est,
-        "motion_level": motion_level,
+        "pitch_fused_deg": pitch_fused_deg,
+        "pitch_lr_diff_deg": pitch_lr_diff_deg,
+        "imu_motion_proxy": imu_motion_proxy,
         "back_right_total": back_right_total,
         "back_left_total": back_left_total,
         "seat_right_total": seat_right_total,

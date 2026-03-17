@@ -1,31 +1,42 @@
 import struct
+import time
 
-from src.communication.uart_protocol import SENSOR_VALUE_COUNT
+from src.communication.uart_protocol import (
+    SENSOR_PACKET_DATA_SIZE,
+    UNPACK_FORMAT,
+    HEADER_DAT,
+    HEADER_CAL,
+)
 
 
-def parse_sensor_payload(payload: bytes):
+def parse_sensor_packet(data_packet: bytes):
     """
-    payload format:
-    seq            : uint16
-    timestamp_ms   : uint32
-    values[22]     : 22 x int16
-
-    total = 2 + 4 + 44 = 50 bytes
+    data_packet must be exactly 128 bytes
+    format: <4s 12i 4H 32H 2h
     """
-    fmt = "<HI" + ("h" * SENSOR_VALUE_COUNT)
-    expected_size = struct.calcsize(fmt)
+    if len(data_packet) != SENSOR_PACKET_DATA_SIZE:
+        raise ValueError(
+            f"Invalid data packet size: expected {SENSOR_PACKET_DATA_SIZE}, got {len(data_packet)}"
+        )
 
-    if len(payload) != expected_size:
-        raise ValueError(f"Invalid payload size: expected {expected_size}, got {len(payload)}")
+    unpacked = struct.unpack(UNPACK_FORMAT, data_packet)
 
-    unpacked = struct.unpack(fmt, payload)
+    header = unpacked[0]
+    if header not in (HEADER_DAT, HEADER_CAL):
+        raise ValueError(f"Invalid packet header: {header!r}")
 
-    seq = unpacked[0]
-    timestamp_ms = unpacked[1]
-    values = list(unpacked[2:])
+    frame_type = header.decode("ascii").rstrip(":")
+
+    loadcell = list(unpacked[1:13])
+    tof_1d = list(unpacked[13:17])
+    tof_3d = list(unpacked[17:49])
+    mpu = list(unpacked[49:51])
 
     return {
-        "seq": seq,
-        "timestamp_ms": timestamp_ms,
-        "values": values,
+        "frame_type": frame_type,               # "DAT" or "CAL"
+        "received_at_ms": int(time.time() * 1000),
+        "loadcell": loadcell,                   # len 12
+        "tof_1d": tof_1d,                       # len 4
+        "tof_3d": tof_3d,                       # len 32
+        "mpu": mpu,                             # len 2
     }

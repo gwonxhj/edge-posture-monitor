@@ -8,15 +8,21 @@ def detect_posture_flags(feature_map, delta_map=None):
     neck_mean = feature_map["neck_mean"]
     neck_forward_delta = feature_map["neck_forward_delta"]
     spine_curve = feature_map["spine_curve"]
-    tilt_est = feature_map["tilt_est"]
+    pitch_fused_deg = feature_map["pitch_fused_deg"]
     back_total = feature_map["back_total"]
 
     # baseline delta
     seat_fb_shift_delta = delta_map.get("seat_fb_shift_delta", seat_fb_shift)
     neck_mean_delta = delta_map.get("neck_mean_delta", 0.0)
-    neck_forward_delta_delta = delta_map.get("neck_forward_delta_delta", neck_forward_delta)
+    neck_forward_delta_delta = delta_map.get(
+        "neck_forward_delta_delta",
+        neck_forward_delta,
+    )
     spine_curve_delta = delta_map.get("spine_curve_delta", spine_curve)
-    tilt_est_delta = delta_map.get("tilt_est_delta", tilt_est)
+    pitch_fused_deg_delta = delta_map.get(
+        "pitch_fused_deg_delta",
+        pitch_fused_deg,
+    )
     back_lr_diff_delta = delta_map.get("back_lr_diff_delta", back_lr_diff)
     seat_lr_diff_delta = delta_map.get("seat_lr_diff_delta", seat_lr_diff)
     back_total_delta = delta_map.get("back_total_delta", 0.0)
@@ -38,7 +44,7 @@ def detect_posture_flags(feature_map, delta_map=None):
     # - 전방 기울기 큼
     if (
         seat_fb_shift > 0.30 and
-        tilt_est > 6.0 and
+        pitch_fused_deg > 6.0 and
         back_total < 42
     ):
         flags["perching"] = True
@@ -55,7 +61,7 @@ def detect_posture_flags(feature_map, delta_map=None):
     if (
         seat_fb_shift > 0.16 and
         spine_curve > 7.0 and
-        tilt_est > 5.0
+        pitch_fused_deg > 5.0
     ):
         flags["forward_lean"] = True
 
@@ -63,14 +69,14 @@ def detect_posture_flags(feature_map, delta_map=None):
     if (
         seat_fb_shift_delta > 0.12 and
         spine_curve_delta > 4.0 and
-        tilt_est_delta > 3.5
+        pitch_fused_deg_delta > 3.5
     ):
         flags["forward_lean"] = True
 
     # 4) reclined
     if (
         seat_fb_shift < -0.10 and
-        tilt_est < -4.0 and
+        pitch_fused_deg < -4.0 and
         back_total > 85
     ):
         flags["reclined"] = True
@@ -103,7 +109,7 @@ def detect_posture_flags(feature_map, delta_map=None):
             seat_fb_shift > 0.18 and
             neck_forward_delta > 4.0 and
             30 <= back_total <= 75 and
-            tilt_est > 4.0
+            pitch_fused_deg > 4.0
         ):
             flags["thinking_pose"] = True
 

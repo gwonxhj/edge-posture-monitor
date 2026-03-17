@@ -1,15 +1,27 @@
 import argparse
-import json
+import struct
 import threading
 import time
 
 import serial
 
+from src.communication.uart_protocol import (
+    BAUD_RATE,
+    UNPACK_FORMAT,
+    HEADER_DAT,
+    HEADER_CAL,
+    MSG_READY,
+    MSG_LINK_OK,
+    MSG_SIT,
+    MSG_CAL_DONE,
+    MSG_STAND,
+    calc_checksum,
+)
 from src.sensor.sensor_simulator import read_mock_sensor
 
 
 class FakeSTM32:
-    def __init__(self, port: str, baud: int = 921600):
+    def __init__(self, port: str, baud: int = BAUD_RATE):
         self.ser = serial.Serial(port, baud, timeout=0.1)
 
         self.calibration_sample_count = 0
@@ -18,11 +30,9 @@ class FakeSTM32:
         self.measure_sample_count = 0
         self.stand_trigger_sample = 300  # 약 6초 후 (50Hz 기준)
         self.sent_stand_once = False
-        self.waiting_resume = False
 
         self.mode = "idle"   # idle / calibration / measure
         self.running = True
-        self.seq = 0
 
         # handshake 안정화용
         self.handshake_ack_received = False
@@ -47,15 +57,31 @@ class FakeSTM32:
         self.ser.write((text + "\n").encode("utf-8"))
         self.ser.flush()
 
-    def send_json_packet(self, packet: dict):
-        self.ser.write((json.dumps(packet, ensure_ascii=False) + "\n").encode("utf-8"))
+    def _build_binary_frame(self, header: bytes, packet: dict) -> bytes:
+        loadcell = packet["loadcell"]
+        tof_1d = packet["tof_1d"]
+        tof_3d = packet["tof_3d"]
+        mpu = packet["mpu"]
+
+        data_128 = struct.pack(
+            UNPACK_FORMAT,
+            header,
+            *loadcell,
+            *tof_1d,
+            *tof_3d,
+            *mpu,
+        )
+        checksum = calc_checksum(data_128)
+        return data_128 + bytes([checksum])
+
+    def send_binary_packet(self, header: bytes, packet: dict):
+        frame = self._build_binary_frame(header, packet)
+        self.ser.write(frame)
         self.ser.flush()
 
     def build_measure_packet(self):
         posture, max_count = self.measure_scenario[self.scenario_idx]
         packet = read_mock_sensor(posture=posture)
-        packet["seq"] = self.seq
-        self.seq += 1
 
         self.scenario_count += 1
         if self.scenario_count >= max_count:
@@ -65,10 +91,7 @@ class FakeSTM32:
         return packet
 
     def build_calibration_packet(self):
-        packet = read_mock_sensor(posture="normal")
-        packet["seq"] = self.seq
-        self.seq += 1
-        return packet
+        return read_mock_sensor(posture="normal")
 
     def sender_loop(self):
         """
@@ -84,32 +107,32 @@ class FakeSTM32:
             if not self.handshake_ack_received:
                 if now - boot_time >= self.initial_boot_delay_sec:
                     if now - self.last_ready_sent_at >= self.ready_interval_sec:
-                        self.send_line("READY")
+                        self.send_line(MSG_READY)
                         self.last_ready_sent_at = now
                         print("[FAKE STM32] sent READY")
 
             if self.mode == "calibration":
                 packet = self.build_calibration_packet()
-                self.send_json_packet(packet)
+                self.send_binary_packet(HEADER_CAL, packet)
                 self.calibration_sample_count += 1
                 time.sleep(0.02)
 
                 if self.calibration_sample_count >= self.calibration_max_samples:
                     self.mode = "idle"
                     self.calibration_sample_count = 0
-                    print("[FAKE STM32] calibration completed -> idle")
+                    self.send_line(MSG_CAL_DONE)
+                    print("[FAKE STM32] sent CAL_DONE -> mode idle")
 
             elif self.mode == "measure":
                 if not self.sent_stand_once and self.measure_sample_count >= self.stand_trigger_sample:
-                    self.send_line("STAND")
+                    self.send_line(MSG_STAND)
                     self.sent_stand_once = True
-                    self.waiting_resume = True
                     self.mode = "idle"
-                    print("[FAKE STM32] sent STAND -> mode idle (waiting resume)")
+                    print("[FAKE STM32] sent STAND -> mode idle")
                     continue
 
                 packet = self.build_measure_packet()
-                self.send_json_packet(packet)
+                self.send_binary_packet(HEADER_DAT, packet)
                 self.measure_sample_count += 1
                 time.sleep(0.02)
 
@@ -118,12 +141,17 @@ class FakeSTM32:
 
     def command_loop(self):
         """
-        RPi -> STM32 명령 처리
+        RPi -> STM32 ASCII 명령 처리
         """
         print("[FAKE STM32] boot...")
 
         while self.running:
-            line = self.ser.readline()
+            try:
+                line = self.ser.readline()
+            except serial.SerialException as e:
+                print(f"[FAKE STM32] serial exception: {e}")
+                break
+            
             if not line:
                 continue
 
@@ -133,35 +161,35 @@ class FakeSTM32:
 
             print(f"[FAKE STM32] RX: {cmd}")
 
-            if cmd.endswith("ACK"):
+            if cmd == "ACK":
                 if not self.handshake_ack_received:
                     self.handshake_ack_received = True
-                    self.send_line("LINK_OK")
+                    self.send_line(MSG_LINK_OK)
                     print("[FAKE STM32] sent LINK_OK")
 
-            elif cmd.endswith("CHK_SIT"):
+            elif cmd == "CHK_SIT":
                 time.sleep(1.0)
-                self.send_line("SIT")
+                self.send_line(MSG_SIT)
                 print("[FAKE STM32] sent SIT")
 
-            elif cmd.endswith("CAL"):
+            elif cmd == "CAL":
                 self.mode = "calibration"
                 self.calibration_sample_count = 0
                 print("[FAKE STM32] mode -> calibration")
 
-            elif cmd.endswith("GO"):
+            elif cmd == "GO":
                 self.mode = "measure"
-                self.waiting_resume = False
-
-                # 재개 후 다시 STAND 테스트가 가능하도록 리셋
                 self.measure_sample_count = 0
                 self.sent_stand_once = False
-
                 print("[FAKE STM32] mode -> measure")
 
-            elif cmd.endswith("STOP"):
+            elif cmd == "STOP":
                 self.mode = "idle"
                 print("[FAKE STM32] mode -> idle")
+
+            elif cmd == "QUIT":
+                self.mode = "idle"
+                print("[FAKE STM32] mode -> idle (QUIT)")
 
     def run(self):
         sender_thread = threading.Thread(target=self.sender_loop, daemon=True)
@@ -179,7 +207,7 @@ class FakeSTM32:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", required=True, help="serial port for fake stm32")
-    parser.add_argument("--baud", type=int, default=921600)
+    parser.add_argument("--baud", type=int, default=BAUD_RATE)
     args = parser.parse_args()
 
     fake = FakeSTM32(port=args.port, baud=args.baud)

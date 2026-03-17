@@ -18,6 +18,7 @@ from src.session.calibration import CalibrationManager
 from src.session.session_manager import SessionManager
 
 from src.storage.database_manager import DatabaseManager
+from src.storage.sample_logger import SampleLogger
 
 from src.feedback.audio_feedback import AudioFeedback
 
@@ -137,6 +138,7 @@ def main():
     session_manager = SessionManager(profile_manager)
     calibration_manager = CalibrationManager(sample_rate_hz=50)
     db_manager = DatabaseManager()
+    sample_logger = SampleLogger(enabled=True)
 
     classifier = PostureClassifier()
     score_engine = PostureScoreEngine(sample_rate_hz=50)
@@ -188,6 +190,11 @@ def main():
             )
 
         if decision == "start_calibration":
+            calibration_reason = app_server.latest_meta_payload.get(
+                "calibration_reason",
+                "initial",
+            )
+
             baseline = run_calibration_flow(
                 receiver=receiver,
                 sender=sender,
@@ -195,6 +202,7 @@ def main():
                 session_manager=session_manager,
                 db_manager=db_manager,
                 app_server=app_server,
+                calibration_reason=calibration_reason,
             )
         else:
             print("앱에서 캘리브레이션 생략 선택")
@@ -208,6 +216,7 @@ def main():
         if decision == "cancel":
             print("앱에서 측정 시작을 취소함.")
             sender.send_stop()
+            session_manager.end_session()
             return
 
         print("앱에서 측정 시작 요청 확인")
@@ -231,6 +240,11 @@ def main():
         baseline = session_manager.get_current_baseline()
         session_id = db_manager.create_session(current_profile["user_id"])
 
+        sample_logger.start_session_log(
+            user_id=current_profile["user_id"],
+            session_id=session_id,
+        )
+
         final_reason = "normal_stop"
 
         while True:
@@ -248,6 +262,8 @@ def main():
                 baseline=baseline,
                 session_id=session_id,
                 runtime_context=runtime_context,
+                calibration_manager=calibration_manager,
+                sample_logger=sample_logger,
             )
 
             if result is None:
@@ -268,6 +284,49 @@ def main():
                     })
                     wait_until_sit_detected(receiver, sender)
                     sender.send_go()
+
+                    baseline = session_manager.get_current_baseline()
+
+                    app_server.update_meta({
+                        "stage": S.MEASURING,
+                    })
+                    continue
+
+                if decision == "recalibration":
+                    print("일시정지 상태에서 재캘리브레이션 요청 확인")
+
+                    baseline = run_calibration_flow(
+                        receiver=receiver,
+                        sender=sender,
+                        calibration_manager=calibration_manager,
+                        session_manager=session_manager,
+                        db_manager=db_manager,
+                        app_server=app_server,
+                        calibration_reason="recalibration",
+                    )
+
+                    decision = wait_for_start_measurement_command(
+                        app_server=app_server,
+                        session_manager=session_manager,
+                        db_manager=db_manager,
+                    )
+
+                    if decision == "cancel":
+                        print("재캘리브레이션 후 측정 시작을 취소")
+                        sender.send_stop()
+                        final_reason = "quit_after_recalibration"
+                        break
+
+                    print("재캘리브레이션 후 측정 시작 요청 확인")
+                    app_server.update_meta({
+                        "stage": S.WAIT_SIT_FOR_MEASURE,
+                    })
+
+                    wait_until_sit_detected(receiver, sender)
+                    sender.send_go()
+
+                    baseline = session_manager.get_current_baseline()
+
                     app_server.update_meta({
                         "stage": S.MEASURING,
                     })
@@ -299,6 +358,8 @@ def main():
             session_id=session_id,
             end_reason=final_reason,
         )
+
+        session_manager.end_session()
 
     finally:
         app_server.stop()
