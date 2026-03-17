@@ -84,6 +84,50 @@ flowchart TD
 - MPU6050 2개
     - 좌/우 pitch angle을 평균하여 자세 판단에 활용
 
+## 시스템 동작 흐름 (Runtime Overview)
+
+```mermaid
+flowchart TD
+
+    A[App: start_measurement] --> B[RPi: CHK_SIT]
+    B --> C[STM32: SIT]
+    C --> D[RPi: GO]
+    D --> E[STM32: DAT stream]
+
+    E --> F[RPi: Sensor Processing]
+
+    subgraph Processing Pipeline
+        F1[parse_sensor_packet]
+        F2[map_raw_packet]
+        F3[extract_features]
+        F4[classifier.predict]
+        F5[posture_flags]
+        F6[score_engine]
+        F7[report_generator]
+    end
+
+    F --> F1 --> F2 --> F3 --> F4 --> F5 --> F6 --> F7
+    F7 --> G[App: realtime update]
+
+    %% STAND flow
+    E --> H{STAND 발생}
+    H -->|yes| I[측정 중단]
+    I --> J[App: 재시작 여부 요청]
+
+    J -->|resume| B
+    J -->|quit| K[세션 종료 및 저장]
+
+    %% Recalibration flow
+    F --> L{Recalibration 요청}
+    L -->|yes| M[STOP]
+    M --> B
+    B --> N[CAL]
+    N --> O[CAL stream]
+    O --> P[CAL_DONE]
+    P --> Q[baseline 저장]
+    Q --> D
+```
+
 ---
 
 # 3. Runtime 상태 흐름
