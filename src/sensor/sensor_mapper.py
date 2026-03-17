@@ -1,4 +1,9 @@
-# src/sensor/sensor_mapper.py
+"""
+Raw sensor packet to semantic packet mapper.
+
+raw 배열 기반 센서 데이터를
+loadcell / spine ToF / head ToF / MPU 의미 구조로 변환한다.
+"""
 
 from src.communication.uart_protocol import (
     IDX_BACK_RIGHT_TOP,
@@ -123,6 +128,7 @@ def map_raw_packet(raw_packet):
         },
 
         "imu": {
+            # 두 MPU6050 pitch 평균값을 대표 pitch로 사용
             "right_pitch_deg": mpu[IDX_MPU_RIGHT],
             "left_pitch_deg": mpu[IDX_MPU_LEFT],
             "pitch_fused_deg": (mpu[IDX_MPU_RIGHT] + mpu[IDX_MPU_LEFT]) / 2.0,

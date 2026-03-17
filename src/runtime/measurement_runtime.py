@@ -1,3 +1,10 @@
+"""
+Realtime measurement runtime loop.
+
+실시간 DAT packet 처리, STAND 이벤트 처리,
+앱 command 처리, 자세 분석 및 리포트 누적을 담당한다.
+"""
+
 from src.communication import session_state as S
 from src.communication.app_payload_builder import (
     build_realtime_payload,

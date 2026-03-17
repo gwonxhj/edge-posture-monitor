@@ -1,4 +1,9 @@
-# src/sensor/sensor_receiver.py
+"""
+UART sensor stream receiver.
+
+STM32에서 전송하는 DAT / CAL binary frame과
+STAND ASCII event를 복원하여 상위 runtime으로 전달한다.
+"""
 
 import json
 import serial

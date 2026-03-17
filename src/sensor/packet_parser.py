@@ -1,3 +1,10 @@
+"""
+Binary sensor packet parser.
+
+128-byte UART payload를 unpack하여
+loadcell / ToF / MPU 구조의 dict로 변환한다.
+"""
+
 import struct
 import time
 
