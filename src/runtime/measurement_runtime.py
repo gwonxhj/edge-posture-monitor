@@ -23,6 +23,13 @@ from src.sensor.sensor_mapper import map_raw_packet
 from src.app_flow.sit_detector import wait_until_sit_detected
 from src.app_flow.app_flow_controller import wait_for_restart_decision
 
+from src.config.settings import (
+    DEBUG_FEATURES,
+    DEBUG_FLAGS,
+    DEBUG_SENSOR_RAW,
+    DEBUG_SUMMARY_EVERY_N,
+)
+
 
 
 def select_report_posture(predicted, flags, feature_map=None):
@@ -79,6 +86,7 @@ def run_measurement_loop(
     score_count = runtime_context.get("score_count", 0)
     posture_count = runtime_context.get("posture_count", {})
     latest_state = runtime_context.get("latest_state", None)
+    sample_index = runtime_context.get("sample_index", 0)
 
     while True:
         cmd = app_server.get_next_command()

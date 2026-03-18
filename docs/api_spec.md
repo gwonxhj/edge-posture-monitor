@@ -13,6 +13,9 @@ http://<raspberry_pi_ip>:8000
 http://127.0.0.1:8000
 ```
 
+참고
+- 본 API는 실제 Raspberry Pi 환경뿐 아니라 Mock STM32 기반 테스트 환경에서도 동일하게 동작한다.
+
 ⸻
 
 ## 2. Health Check API
@@ -76,14 +79,14 @@ Example Response
 ```
 
 Field Description
-	•	type: payload 종류 (meta)
-	•	connected: 서버 연결 상태
-	•	backend: 현재 통신 방식
-	•	stage: 현재 동작 단계
-	•	ws_clients: 현재 WebSocket 연결 수
-	•	timestamp: Unix timestamp
-	•	user_id: 현재 사용자 ID
-	•	user_name: 현재 사용자 이름
+- type: payload 종류 (meta)
+- connected: 서버 연결 상태
+- backend: 현재 통신 방식
+- stage: 현재 동작 단계
+- ws_clients: 현재 WebSocket 연결 수
+- timestamp: Unix timestamp
+- user_id: 현재 사용자 ID
+- user_name: 현재 사용자 이름
 
 ⸻
 
@@ -119,6 +122,22 @@ Example Error Response
 }
 ```
 
+Example Invalid Stage Response
+```text
+{
+  "ok": false,
+  "accepted": false,
+  "error": "invalid_stage",
+  "stage": "uart_link_ready",
+  "expected_stage": "wait_start_decision"
+}
+```
+
+Field Description
+- error: 에러 코드(ex. missing_cmd, invalid_stage)
+- stage: 현재 시스템 stage
+- expected_stage: 해당 command가 허용되는 stage
+
 ⸻
 
 ## 5. Command List
@@ -147,6 +166,9 @@ Field Type
 -	rest_work_min: int
 -	rest_break_min: int
 
+설명
+- 신규 사용자이거나 baseline이 없는 경우 이후 calibration 단계가 필요할 수 있다.
+
 ⸻
 
 5-2. Select Profile
@@ -159,6 +181,10 @@ Field Type
 }
 ```
 
+설명
+- 기존 사용자를 선택한다.
+- 선택된 사용자에 baseline이 없거나 재측정이 필요한 경우 이후 calibration 단계로 진행할 수 있다.
+
 ⸻
 
 5-3. Start Calibration
@@ -169,6 +195,9 @@ Field Type
   "cmd": "start_calibration"
 }
 ```
+
+Valid Stage
+- wait_calibration_decision
 
 ⸻
 
@@ -181,6 +210,9 @@ Field Type
 }
 ```
 
+Valid Stage
+- wait_calibration_decision
+
 ⸻
 
 5-5. Start Measurement
@@ -191,6 +223,9 @@ Field Type
   "cmd": "start_measurement"
 }
 ```
+
+Valid Stage
+- wait_start_decision
 
 동작 설명
 - 사용자가 측정 시작을 선택했을 때 사용한다.
@@ -209,6 +244,9 @@ Field Type
 }
 ```
 
+Valid Stage
+- measuring
+
 동작 설명
 - 측정이 진행 중일 때 사용자가 잠시 측정을 멈추고 싶을 때 사용한다.
 - RPi는 STM32에 STOP 명령을 전송한다.
@@ -216,8 +254,6 @@ Field Type
 - RPi는 현재까지의 측정 데이터를 메모리에 유지한다.
 - 이 시점에는 세션을 DB에 저장하지 않는다.
 - 이후 앱은 resume_measurement 또는 quit_measurement를 보낼 수 있다.
-
-
 
 ⸻
 
@@ -229,6 +265,9 @@ Field Type
   "cmd": "resume_measurement"
 }
 ```
+
+Valid Stage
+- paused
 
 동작 설명
 - 일시정지 상태(paused)에서 측정을 다시 이어서 진행할 때 사용한다.
@@ -248,6 +287,11 @@ Field Type
 }
 ```
 
+Valid Stage
+- measuring
+- paused
+- wait_restart_decision
+
 동작 설명
 - 측정 중이거나 일시정지 상태일 때 사용자가 세션을 완전히 종료하고 싶을 때 사용한다.
 - 측정 중(measuring)인 경우 RPi는 STM32에 STOP 명령을 전송한 뒤 세션을 종료한다.
@@ -264,6 +308,9 @@ Field Type
   "cmd": "resume_after_stand"
 }
 ```
+
+Valid Stage
+- wait_restart_decision
 
 동작 설명
 - STM32가 STAND를 보낸 이후 사용자가 다시 측정을 이어가고 싶을 때 사용한다.
@@ -282,6 +329,9 @@ Field Type
 }
 ```
 
+Valid Stage
+- wait_restart_decision
+
 동작 설명
 - STM32가 STAND 이벤트를 RPi로 전송하면 이미 측정이 중단된 상태로 간주한다.
 - 사용자가 재측정을 원하지 않을 때 이 명령을 사용한다.
@@ -298,6 +348,14 @@ Field Type
   "cmd": "request_recalibration"
 }
 ```
+
+Valid Stage
+- wait_calibration_decision
+- paused
+
+동작 설명
+- 기존 baseline을 다시 측정하기 위해 사용된다.
+- 상황에 따라 RPi는 STOP -> CHK_SIT -> CAL 흐름을 수행한다.
 
 ⸻
 
@@ -319,6 +377,7 @@ Endpoint
 -	stand_event
 -	minute_summary
 -	overall_summary
+- enhanced_report
 
 특징
 -	새 WebSocket 클라이언트가 연결되면 현재 snapshot을 즉시 받는다.
@@ -371,6 +430,11 @@ Example
   }
 }
 ```
+
+주의
+- posture.dominant는 실시간 classifier 출력 기준 자세이다.
+- 최종 리포트에서 사용하는 대표 자세는 rule-based flag 보정 결과와 다를 수 있다.
+- 앱에서는 posture.dominant와 posture.flags를 함께 사용하는 것을 권장한다.
 
 ⸻
 
@@ -452,6 +516,38 @@ Example
 
 ⸻
 
+## 10-A. Enhanced Report Payload
+
+세션 종료 후 rule-based 또는 향후 LLM 기반으로 생성되는 해석형 리포트 데이터
+
+Example
+```text
+{
+  "type": "enhanced_report",
+  "user_id": "user_001",
+  "session_id": 1,
+  "data": {
+    "summary_text": "전체 평균 점수는 100.0점으로 우수 수준입니다. 주요 자세는 forward_lean이며, 나쁜 자세 비율은 100.0%입니다.",
+    "trend_text": "측정 전반에서 forward_lean 자세가 지속되었습니다.",
+    "exercise_recommendations": [
+      "허리 신전 스트레칭",
+      "플랭크",
+      "고관절 스트레칭"
+    ]
+  }
+}
+```
+
+Field Description
+- type: payload 종류 (enhanced_report)
+- user_id: 사용자 ID
+- session_id: 세션 ID
+- data.summary_text: 전체 요약 문장
+- data.trend_text: 자세 추이 설명
+- data.exercise_recommendations: 추천 운동 리스트
+
+⸻
+
 ## 11. Posture Label List
 
 서버에서 사용하는 대표 자세 문자열 목록
@@ -493,6 +589,8 @@ Example
 -	wait_restart_decision
 -	measurement_stop_requested
 -	session_saved
+
+추가 설명
 - `measurement_stop_requested`: 종료 또는 중단 요청이 수신되어 세션 종료 절차로 진입한 상태
 
 앱은 meta.stage를 기준으로 화면 상태를 전환한다.

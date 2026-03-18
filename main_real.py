@@ -24,7 +24,7 @@ from src.storage.sample_logger import SampleLogger
 from src.feedback.audio_feedback import AudioFeedback
 
 from src.report.report_generator import ReportGenerator
-from src.report.report_enhancer import ReportEnhancer
+from src.report.report_service import ReportService
 
 from src.communication.command_sender import CommandSender
 from src.communication.wifi_server import WiFiServer
@@ -39,6 +39,14 @@ from src.communication.app_payload_builder import (
 )
 
 from src.runtime.measurement_runtime import run_measurement_loop
+
+from src.config.settings import (
+    UART_PORT,
+    UART_BAUD,
+    UART_MOCK_MODE,
+    SAMPLE_RATE_HZ,
+    ENABLE_SAMPLE_LOGGER,
+)
 
 
 
@@ -77,8 +85,8 @@ def finalize_and_save_session(
 
     minute_summary = report_gen.build_minute_summary()
 
-    enhancer = ReportEnhancer()
-    enhanced_report = enhancer.build_enhanced_report(
+    report_service = ReportService()
+    enhanced_report = report_service.build_enhanced_report(
         overall_summary=overall_summary,
         minute_summary=minute_summary,
     )
@@ -136,9 +144,9 @@ def finalize_and_save_session(
 
 
 def main():
-    uart_port = os.getenv("POSTURE_UART_PORT", "/dev/ttyAMA0")
-    uart_mock_mode = os.getenv("POSTURE_UART_MOCK", "0") == "1"
-    uart_baud = int(os.getenv("POSTURE_UART_BAUD", "921600"))
+    uart_port = UART_PORT
+    uart_mock_mode = UART_MOCK_MODE
+    uart_baud = UART_BAUD
 
     print(f"[UART] using port: {uart_port}")
     print(f"[UART] mock mode: {uart_mock_mode}")
@@ -160,12 +168,12 @@ def main():
 
     profile_manager = ProfileManager()
     session_manager = SessionManager(profile_manager)
-    calibration_manager = CalibrationManager(sample_rate_hz=50)
+    calibration_manager = CalibrationManager(sample_rate_hz=SAMPLE_RATE_HZ)
     db_manager = DatabaseManager()
-    sample_logger = SampleLogger(enabled=True)
+    sample_logger = SampleLogger(enabled=ENABLE_SAMPLE_LOGGER)
 
     classifier = PostureClassifier()
-    score_engine = PostureScoreEngine(sample_rate_hz=50)
+    score_engine = PostureScoreEngine(sample_rate_hz=SAMPLE_RATE_HZ)
     audio = AudioFeedback()
     report_gen = ReportGenerator()
 
