@@ -67,17 +67,22 @@ def read_mock_sensor(posture=None):
         loadcell[4:8] = _rand_list(4, 6, 10)
 
         loadcell[8] = random.randint(7, 10)    # rear right
-        loadcell[9] = random.randint(13, 17)   # front right
+        loadcell[9] = random.randint(14, 18)   # front right
         loadcell[10] = random.randint(7, 10)   # rear left
-        loadcell[11] = random.randint(13, 17)  # front left
+        loadcell[11] = random.randint(14, 18)  # front left
 
-        tof_1d[0] = random.randint(30, 36)
-        tof_1d[1] = random.randint(26, 32)
-        tof_1d[2] = random.randint(22, 28)
-        tof_1d[3] = random.randint(18, 24)
+        # 상체 전체가 앞으로 기운 느낌
+        tof_1d[0] = random.randint(31, 37)
+        tof_1d[1] = random.randint(27, 33)
+        tof_1d[2] = random.randint(23, 29)
+        tof_1d[3] = random.randint(19, 25)
 
-        tof_3d = _rand_list(32, 24, 30)
-        mpu = [random.randint(8, 15), random.randint(8, 15)]
+        # 목 3D ToF는 normal보다 아주 조금만 증가
+        # turtle_neck처럼 neck_mean_delta가 크게 뛰지 않게 제한
+        tof_3d = _rand_list(32, 20, 24)
+
+        # 전방 기울기만 강하게
+        mpu = [random.randint(8, 14), random.randint(8, 14)]
 
     elif posture == "reclined":
         loadcell[0:4] = _rand_list(4, 13, 18)
@@ -147,38 +152,47 @@ def read_mock_sensor(posture=None):
         mpu = [random.randint(-2, 2), random.randint(-2, 2)]
 
     elif posture == "thinking_pose":
-        loadcell[0:4] = _rand_list(4, 5, 9)
-        loadcell[4:8] = _rand_list(4, 5, 9)
+        # 등판은 normal과 비슷하거나 약간만 감소
+        loadcell[0:4] = _rand_list(4, 8, 11)
+        loadcell[4:8] = _rand_list(4, 8, 11)
 
-        loadcell[8] = random.randint(7, 10)
-        loadcell[9] = random.randint(12, 16)
-        loadcell[10] = random.randint(7, 10)
-        loadcell[11] = random.randint(12, 16)
+        # 좌판은 아주 약한 전방 쏠림만
+        loadcell[8] = random.randint(9, 11)   # rear right
+        loadcell[9] = random.randint(11, 13)  # front right
+        loadcell[10] = random.randint(9, 11)  # rear left
+        loadcell[11] = random.randint(11, 13) # front left
 
-        tof_1d[0] = random.randint(28, 34)
-        tof_1d[1] = random.randint(24, 30)
-        tof_1d[2] = random.randint(20, 26)
-        tof_1d[3] = random.randint(16, 22)
+        # 상부만 약간 앞으로, forward_lean처럼 전체 붕괴는 아님
+        tof_1d[0] = random.randint(22, 24)
+        tof_1d[1] = random.randint(21, 23)
+        tof_1d[2] = random.randint(20, 22)
+        tof_1d[3] = random.randint(19, 21)
 
-        tof_3d = _rand_list(32, 28, 34)
-        mpu = [random.randint(4, 9), random.randint(5, 10)]
+        # 목 전방은 normal보다 조금만 크게
+        tof_3d = _rand_list(32, 22, 24)
+
+        # 약한~중간 정도 기울기
+        mpu = [random.randint(2, 4), random.randint(2, 4)]
 
     elif posture == "perching":
-        loadcell[0:4] = _rand_list(4, 3, 6)
-        loadcell[4:8] = _rand_list(4, 3, 6)
+        # 등판 접촉 거의 없음
+        loadcell[0:4] = _rand_list(4, 0, 2)
+        loadcell[4:8] = _rand_list(4, 0, 2)
 
-        loadcell[8] = random.randint(5, 8)
-        loadcell[9] = random.randint(15, 19)
-        loadcell[10] = random.randint(5, 8)
-        loadcell[11] = random.randint(15, 19)
+        # 좌판 앞쪽에 강하게 걸터앉음
+        loadcell[8] = random.randint(2, 4)    # rear right
+        loadcell[9] = random.randint(17, 21)  # front right
+        loadcell[10] = random.randint(2, 4)   # rear left
+        loadcell[11] = random.randint(17, 21) # front left
 
-        tof_1d[0] = random.randint(26, 32)
-        tof_1d[1] = random.randint(22, 28)
-        tof_1d[2] = random.randint(18, 24)
-        tof_1d[3] = random.randint(14, 20)
+        # 상체는 전방으로 기울지만 spine 전체 붕괴는 forward_lean보다 약간 덜하게
+        tof_1d[0] = random.randint(23, 28)
+        tof_1d[1] = random.randint(20, 25)
+        tof_1d[2] = random.randint(18, 22)
+        tof_1d[3] = random.randint(16, 20)
 
-        tof_3d = _rand_list(32, 24, 30)
-        mpu = [random.randint(7, 12), random.randint(7, 12)]
+        tof_3d = _rand_list(32, 20, 24)
+        mpu = [random.randint(7, 10), random.randint(7, 10)]
 
     else:
         raise ValueError(f"Unknown posture: {posture}")

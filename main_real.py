@@ -2,6 +2,7 @@ import os
 
 from src.sensor.sensor_receiver import SensorReceiver
 
+from src.app_flow.calibration_flow import run_calibration_flow
 from src.app_flow.sit_detector import wait_until_sit_detected
 from src.app_flow.app_flow_controller import (
     wait_for_app_profile_command,
@@ -23,6 +24,7 @@ from src.storage.sample_logger import SampleLogger
 from src.feedback.audio_feedback import AudioFeedback
 
 from src.report.report_generator import ReportGenerator
+from src.report.report_enhancer import ReportEnhancer
 
 from src.communication.command_sender import CommandSender
 from src.communication.wifi_server import WiFiServer
@@ -31,13 +33,13 @@ from src.communication.uart_protocol import (
     MSG_READY,
     MSG_LINK_OK,
 )
-
-from src.app_flow.calibration_flow import run_calibration_flow
-from src.runtime.measurement_runtime import run_measurement_loop
 from src.communication.app_payload_builder import (
     build_minute_summary_payload,
     build_overall_summary_payload,
 )
+
+from src.runtime.measurement_runtime import run_measurement_loop
+
 
 
 def finalize_and_save_session(
@@ -63,12 +65,26 @@ def finalize_and_save_session(
     total_sitting_sec = latest_state["total_sitting_sec"] if latest_state else 0
     posture_duration_sec = latest_state["posture_duration_sec"] if latest_state else {}
 
+    print("\n=== Posture Duration Sec ===")
+    print(posture_duration_sec)
+    print(f"total_sitting_sec={total_sitting_sec}")
+    print(f"sum_posture_duration={round(sum(posture_duration_sec.values()), 2) if posture_duration_sec else 0}")
+
     overall_summary = report_gen.build_overall_summary(
         total_sitting_sec=total_sitting_sec,
         posture_duration_sec=posture_duration_sec,
     )
 
     minute_summary = report_gen.build_minute_summary()
+
+    enhancer = ReportEnhancer()
+    enhanced_report = enhancer.build_enhanced_report(
+        overall_summary=overall_summary,
+        minute_summary=minute_summary,
+    )
+
+    print("\n=== Enhanced Report ===")
+    print(enhanced_report)
 
     print("\n=== Overall Summary ===")
     print(overall_summary)
@@ -87,12 +103,20 @@ def finalize_and_save_session(
 
     db_manager.save_minute_reports(session_id, minute_summary)
     db_manager.save_daily_report(current_profile["user_id"], overall_summary)
+    db_manager.save_enhanced_report(session_id, enhanced_report)
 
     overall_payload = build_overall_summary_payload(
         user_id=current_profile["user_id"],
         session_id=session_id,
         summary=overall_summary,
     )
+    app_server.update_report({
+        "type": "enhanced_report",
+        "user_id": current_profile["user_id"],
+        "session_id": session_id,
+        "data": enhanced_report,
+    })
+
     app_server.update_report(overall_payload)
 
     for item in minute_summary:

@@ -24,6 +24,38 @@ from src.app_flow.sit_detector import wait_until_sit_detected
 from src.app_flow.app_flow_controller import wait_for_restart_decision
 
 
+
+def select_report_posture(predicted, flags, feature_map=None):
+    """
+    다중 flag 중 리포트용 대표 자세 1개를 선택한다.
+    forward_lean 과 turtle_neck 이 동시에 켜질 수 있으므로
+    좌판 전방 쏠림이 뚜렷하면 forward_lean을 우선한다.
+    """
+    feature_map = feature_map or {}
+    seat_fb_shift = feature_map.get("seat_fb_shift", 0.0)
+    pitch_fused_deg = feature_map.get("pitch_fused_deg", 0.0)
+
+    # forward lean 강한 조건이면 turtle_neck보다 우선
+    if flags.get("forward_lean") and (
+        seat_fb_shift > 0.16 or pitch_fused_deg > 5.0
+    ):
+        return "forward_lean"
+
+    priority = [
+        "turtle_neck",
+        "thinking_pose",
+        "perching",
+        "side_slouch",
+        "reclined",
+        "leg_cross_suspect",
+    ]
+
+    for posture in priority:
+        if flags.get(posture):
+            return posture
+
+    return predicted
+
 def run_measurement_loop(
     receiver,
     sender,
@@ -209,8 +241,27 @@ def run_measurement_loop(
         feature_map = extracted["feature_map"]
         delta_map = extracted["delta_map"]
 
+        print(
+            "[DEBUG FEATURE]",
+            {
+                "seat_fb_shift": round(feature_map["seat_fb_shift"], 3),
+                "neck_mean": round(feature_map["neck_mean"], 3),
+                "neck_forward_delta": round(feature_map["neck_forward_delta"], 3),
+                "spine_curve": round(feature_map["spine_curve"], 3),
+                "pitch_fused_deg": round(feature_map["pitch_fused_deg"], 3),
+                "back_total": round(feature_map["back_total"], 3),
+                "neck_mean_delta": round(delta_map.get("neck_mean_delta", 0.0), 3),
+                "neck_forward_delta_delta": round(delta_map.get("neck_forward_delta_delta", 0.0), 3),
+            }
+        )
+
         predicted = classifier.predict(features)
         flags = detect_posture_flags(feature_map, delta_map)
+        report_posture = select_report_posture(
+            predicted=predicted,
+            flags=flags,
+            feature_map=feature_map,
+        )
 
         sample_logger.log_sample(
             user_id=current_profile["user_id"],
@@ -226,7 +277,7 @@ def run_measurement_loop(
         )
 
         state = score_engine.update(
-            posture=predicted,
+            posture=report_posture,
             flags=flags,
             step_samples=1,
         )
@@ -239,7 +290,7 @@ def run_measurement_loop(
 
         score_sum += state["score"]
         score_count += 1
-        posture_count[predicted] = posture_count.get(predicted, 0) + 1
+        posture_count[report_posture] = posture_count.get(report_posture, 0) + 1
 
         runtime_context["score_sum"] = score_sum
         runtime_context["score_count"] = score_count
@@ -249,7 +300,7 @@ def run_measurement_loop(
         report_gen.add_sample(
             timestamp_sec=state["total_sitting_sec"],
             score=state["score"],
-            posture=predicted,
+            posture=report_posture,
         )
 
         realtime_payload = build_realtime_payload(
@@ -262,9 +313,11 @@ def run_measurement_loop(
         app_server.update_status(realtime_payload)
 
         active_flags = [k for k, v in flags.items() if v]
+        print(f"[DEBUG FLAGS] {flags}")
 
         print(
-            f"[REAL] posture={predicted} ({to_display_label(predicted)}) | "
+            f"[REAL] predicted={predicted} ({to_display_label(predicted)}) | "
+            f"report_posture={report_posture} | "
             f"flags={active_flags} | "
             f"score={state['score']} | "
             f"duration={state['current_duration_sec']}s | "

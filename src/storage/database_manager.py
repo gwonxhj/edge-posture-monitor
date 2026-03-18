@@ -114,6 +114,20 @@ class DatabaseManager:
         """)
 
         # -------------------------------------------------
+        # enhanced_reports
+        # 세션 종료 후 생성된 해석 리포트 저장
+        # -------------------------------------------------
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS enhanced_reports (
+            enhanced_report_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id INTEGER NOT NULL UNIQUE,
+            report_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(session_id) REFERENCES sessions(session_id)
+        )
+        """)
+
+        # -------------------------------------------------
         # daily_reports
         # user_id + report_date 당 1행 유지하도록 재구성
         # -------------------------------------------------
@@ -152,6 +166,11 @@ class DatabaseManager:
         cur.execute("""
         CREATE UNIQUE INDEX IF NOT EXISTS idx_minute_reports_session_minute
         ON minute_reports(session_id, minute_index)
+        """)
+
+        cur.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_enhanced_reports_session
+        ON enhanced_reports(session_id)           
         """)
 
         cur.execute("""
@@ -487,6 +506,26 @@ class DatabaseManager:
             return None
 
         return dict(row)
+    
+    def save_enhanced_report(self, session_id, report: dict):
+        conn = self._connect()
+        cur = conn.cursor()
+
+        cur.execute("""
+        INSERT INTO enhanced_reports (
+            session_id, report_json, created_at
+        ) VALUES (?, ?, ?)
+        ON CONFLICT(session_id) DO UPDATE SET
+            report_json=excluded.report_json,
+            created_at=excluded.created_at
+        """, (
+            session_id,
+            json.dumps(report, ensure_ascii=False),
+            datetime.now().isoformat(),
+        ))
+
+        conn.commit()
+        conn.close()
 
     # -------------------------------------------------
     # minute reports

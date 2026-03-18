@@ -43,33 +43,39 @@ def detect_posture_flags(feature_map, delta_map=None):
     # - 등판 접촉 현저히 적음
     # - 전방 기울기 큼
     if (
-        seat_fb_shift > 0.30 and
-        pitch_fused_deg > 6.0 and
-        back_total < 42
+        seat_fb_shift > 0.28 and
+        pitch_fused_deg > 5.5 and
+        back_total < 30
     ):
         flags["perching"] = True
 
     # 2) turtle_neck
+    # - 목 전방이 분명해야 하며
+    # - 단순 thinking_pose 수준의 약한 전방 이동은 제외
     if (
-        neck_forward_delta > 5.0 or
-        neck_mean_delta > 6.0 or
-        neck_forward_delta_delta > 4.0
+        (neck_forward_delta > 5.5 and neck_mean_delta > 4.0) or
+        (neck_mean_delta > 6.5) or
+        (neck_forward_delta_delta > 4.5 and pitch_fused_deg > 3.0)
     ):
         flags["turtle_neck"] = True
 
     # 3) forward_lean
+    # - 몸통 전체가 앞으로 기울어진 자세
+    # - thinking_pose보다 좌판 전방 쏠림과 척추 굴곡이 더 커야 함
     if (
-        seat_fb_shift > 0.16 and
-        spine_curve > 7.0 and
-        pitch_fused_deg > 5.0
+        seat_fb_shift > 0.20 and
+        spine_curve > 8.5 and
+        pitch_fused_deg > 5.5 and
+        back_total >= 36
     ):
         flags["forward_lean"] = True
 
     # baseline 보정
     if (
-        seat_fb_shift_delta > 0.12 and
-        spine_curve_delta > 4.0 and
-        pitch_fused_deg_delta > 3.5
+        seat_fb_shift_delta > 0.14 and
+        spine_curve_delta > 4.5 and
+        pitch_fused_deg_delta > 3.5 and
+        back_total >= 36
     ):
         flags["forward_lean"] = True
 
@@ -102,21 +108,24 @@ def detect_posture_flags(feature_map, delta_map=None):
         flags["leg_cross_suspect"] = True
 
     # 7) thinking_pose
-    # - forward lean/turtle neck 성격이 일부 같이 나타날 수 있음
-    # - 다만 perching일 정도로 back_total이 낮으면 제외
-    if not flags["perching"]:
+    # - 몸통 전체 붕괴보다는 상부/목 중심의 약한 전방 자세
+    # - perching, turtle_neck는 제외
+    # - forward_lean보다 좌판 전방 쏠림과 척추 굴곡이 약해야 함
+    if not flags["perching"] and not flags["turtle_neck"]:
         if (
-            seat_fb_shift > 0.18 and
-            neck_forward_delta > 4.0 and
-            30 <= back_total <= 75 and
-            pitch_fused_deg > 4.0
+            0.04 < seat_fb_shift <= 0.16 and
+            2.0 < neck_forward_delta <= 5.0 and
+            38 <= back_total <= 90 and
+            1.5 <= pitch_fused_deg <= 5.0 and
+            spine_curve < 6.5
         ):
             flags["thinking_pose"] = True
 
         if (
-            seat_fb_shift_delta > 0.10 and
-            neck_forward_delta_delta > 2.5 and
-            35 <= back_total <= 80
+            0.03 < seat_fb_shift_delta <= 0.10 and
+            1.0 < neck_forward_delta_delta <= 3.5 and
+            38 <= back_total <= 90 and
+            spine_curve_delta < 3.0
         ):
             flags["thinking_pose"] = True
 

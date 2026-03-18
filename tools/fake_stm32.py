@@ -21,8 +21,10 @@ from src.sensor.sensor_simulator import read_mock_sensor
 
 
 class FakeSTM32:
-    def __init__(self, port: str, baud: int = BAUD_RATE):
+    def __init__(self, port: str, baud: int = BAUD_RATE, scenario: str = "mixed"):
         self.ser = serial.Serial(port, baud, timeout=0.1)
+
+        self.scenario_name = scenario
 
         self.calibration_sample_count = 0
         self.calibration_max_samples = 500
@@ -40,18 +42,11 @@ class FakeSTM32:
         self.last_ready_sent_at = 0.0
         self.initial_boot_delay_sec = 2.0
 
-        self.measure_scenario = [
-            ("normal", 100),
-            ("turtle_neck", 150),
-            ("forward_lean", 150),
-            ("side_slouch", 120),
-            ("leg_cross_suspect", 120),
-            ("thinking_pose", 120),
-            ("perching", 120),
-            ("reclined", 80),
-        ]
+        self.measure_scenario = self._build_measure_scenario(scenario)
         self.scenario_idx = 0
         self.scenario_count = 0
+
+        print(f"[FAKE STM32] scenario: {self.scenario_name}")
 
     def send_line(self, text: str):
         self.ser.write((text + "\n").encode("utf-8"))
@@ -89,6 +84,43 @@ class FakeSTM32:
             self.scenario_idx = (self.scenario_idx + 1) % len(self.measure_scenario)
 
         return packet
+    
+    def _build_measure_scenario(self, scenario_name: str):
+        if scenario_name == "normal_only":
+            return [("normal", 999999)]
+
+        if scenario_name == "turtle_neck_only":
+            return [("turtle_neck", 999999)]
+
+        if scenario_name == "forward_lean_only":
+            return [("forward_lean", 999999)]
+
+        if scenario_name == "side_slouch_only":
+            return [("side_slouch", 999999)]
+        
+        if scenario_name == "leg_cross_only":
+            return [("leg_cross_suspect", 999999)]
+        
+        if scenario_name == "thinking_pose_only":
+            return [("thinking_pose", 999999)]
+
+        if scenario_name == "perching_only":
+            return [("perching", 999999)]
+        
+        if scenario_name == "reclined_only":
+            return [("reclined", 999999)]
+
+        # default: mixed
+        return [
+            ("normal", 100),
+            ("turtle_neck", 150),
+            ("forward_lean", 150),
+            ("side_slouch", 120),
+            ("leg_cross_suspect", 120),
+            ("thinking_pose", 120),
+            ("perching", 120),
+            ("reclined", 80),
+        ]
 
     def build_calibration_packet(self):
         return read_mock_sensor(posture="normal")
@@ -151,7 +183,7 @@ class FakeSTM32:
             except serial.SerialException as e:
                 print(f"[FAKE STM32] serial exception: {e}")
                 break
-            
+
             if not line:
                 continue
 
@@ -208,9 +240,29 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", required=True, help="serial port for fake stm32")
     parser.add_argument("--baud", type=int, default=BAUD_RATE)
+    parser.add_argument(
+        "--scenario",
+        default="mixed",
+        choices=[
+            "mixed",
+            "normal_only",
+            "turtle_neck_only",
+            "forward_lean_only",
+            "side_slouch_only",
+            "leg_cross_only",
+            "thinking_pose_only",
+            "perching_only",
+            "reclined_only",
+        ],
+        help="fake posture scenario",
+    )
     args = parser.parse_args()
 
-    fake = FakeSTM32(port=args.port, baud=args.baud)
+    fake = FakeSTM32(
+        port=args.port, 
+        baud=args.baud,
+        scenario=args.scenario,
+    )
     fake.run()
 
 
