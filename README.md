@@ -241,20 +241,20 @@ flowchart TD
 ```mermaid
 flowchart TD
 
-	Sensor[STM32 Sensor Data]
-    Receiver[SensorReceiver]
-    Parser[Packet Parser]
-    Mapper[Sensor Mapper]
-    Feature[Feature Extractor]
-    Classifier[Posture Classifier / Rule-based Flags]
-    Score[Posture Score Engine]
-    Report[Report Generator]
-    DB[(SQLite Database)]
+	Sensor["STM32 Sensor Data"]
+    Receiver["SensorReceiver"]
+    Parser["Packet Parser"]
+    Mapper["Sensor Mapper"]
+    Feature["Feature Extractor"]
+    Classifier["Posture Classifier / Rule-based Flags"]
+    Score["Posture Score Engine"]
+    Report["Report Generator"]
+    DB["SQLite Database"]
 
     Sensor --> Receiver
     Receiver --> Parser
     Parser --> Mapper
-    Mapper -> Feature
+    Mapper --> Feature
     Feature --> Classifier
     Classifier --> Score
     Score --> Report
