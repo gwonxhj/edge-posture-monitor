@@ -545,27 +545,27 @@ AI / Embedded Systems
 ```text
 edge-posture-monitor
 │
-├ docs
+├ docs                    # 시스템 구조, API, 테스트 문서
 │   ├ api_spec.md
 │   ├ system_architecture.md
 │   └ test_checklist.md
 │
 ├ src
-│   ├ communication
-│   ├ sensor
-│   ├ core
-│   ├ runtime
-│   ├ report
-│   └ storage
+│   ├ communication       # UART / WebSocket / API 통신 처리
+│   ├ sensor              # 센서 데이터 수집 및 mock 시뮬레이터
+│   ├ core                # feature 추출, posture classification 로직
+│   ├ runtime             # 상태 머신 및 측정 세션 관리
+│   ├ report              # 리포트 생성 (summary / trend / recommendation)
+│   └ storage             # SQLite DB 처리 및 데이터 저장
 │
 ├ tools
-│   └ fake_stm32.py
+│   └ fake_stm32.py       # STM32 시뮬레이터 (mock 테스트)
 │
-├ data
-├ models
-├ profiles
+├ data                    # 로그 및 수집 데이터
+├ models                  # 향후 ML 모델 저장 영역
+├ profiles                # 사용자 baseline 데이터
 │
-├ main_real.py
+├ main_real.py            # 시스템 실행 entry point
 ├ requirements.txt
 └ README.md
 ```
