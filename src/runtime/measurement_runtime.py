@@ -9,6 +9,7 @@ from src.communication import session_state as S
 from src.communication.app_payload_builder import (
     build_realtime_payload,
     build_stand_event_payload,
+    build_debug_sensor_payload,
 )
 from src.communication.app_command_handler import handle_app_command
 from src.communication.uart_protocol import MSG_CAL_DONE
@@ -87,6 +88,9 @@ def run_measurement_loop(
     posture_count = runtime_context.get("posture_count", {})
     latest_state = runtime_context.get("latest_state", None)
     sample_index = runtime_context.get("sample_index", 0)
+    last_checksum_warn = runtime_context.get("last_checksum_warn", 0)
+    last_parse_warn = runtime_context.get("last_parse_warn", 0)
+    prev_report_posture = runtime_context.get("prev_report_posture")
 
     while True:
         cmd = app_server.get_next_command()
@@ -181,11 +185,23 @@ def run_measurement_loop(
         if raw_packet is None:
             continue
 
-        if receiver.checksum_fail_count > 0 and receiver.checksum_fail_count % 50 == 0:
+        if (
+            receiver.checksum_fail_count > 0 
+            and receiver.checksum_fail_count % 50 == 0
+            and receiver.checksum_fail_count != last_checksum_warn
+        ):
             print(f"[WARN] checksum_fail_count={receiver.checksum_fail_count}")
+            last_checksum_warn = receiver.checksum_fail_count
+            runtime_context["last_checksum_warn"] = last_checksum_warn
 
-        if receiver.parse_fail_count > 0 and receiver.parse_fail_count % 20 == 0:
+        if (
+            receiver.parse_fail_count > 0 
+            and receiver.parse_fail_count % 20 == 0
+            and receiver.parse_fail_count != last_parse_warn
+        ):
             print(f"[WARN] parse_fail_count={receiver.parse_fail_count}")
+            last_parse_warn = receiver.parse_fail_count
+            runtime_context["last_parse_warn"] = last_parse_warn
 
         if raw_packet.get("frame_type") == "EVENT":
             if raw_packet.get("event") == "STAND":
@@ -242,6 +258,9 @@ def run_measurement_loop(
         if raw_packet.get("frame_type") != "DAT":
             continue
 
+        sample_index += 1
+        runtime_context["sample_index"] = sample_index
+
         semantic_packet = map_raw_packet(raw_packet)
 
         extracted = extract_features(semantic_packet, baseline=baseline)
@@ -249,19 +268,33 @@ def run_measurement_loop(
         feature_map = extracted["feature_map"]
         delta_map = extracted["delta_map"]
 
-        print(
-            "[DEBUG FEATURE]",
-            {
-                "seat_fb_shift": round(feature_map["seat_fb_shift"], 3),
-                "neck_mean": round(feature_map["neck_mean"], 3),
-                "neck_forward_delta": round(feature_map["neck_forward_delta"], 3),
-                "spine_curve": round(feature_map["spine_curve"], 3),
-                "pitch_fused_deg": round(feature_map["pitch_fused_deg"], 3),
-                "back_total": round(feature_map["back_total"], 3),
-                "neck_mean_delta": round(delta_map.get("neck_mean_delta", 0.0), 3),
-                "neck_forward_delta_delta": round(delta_map.get("neck_forward_delta_delta", 0.0), 3),
-            }
-        )
+        if DEBUG_SENSOR_RAW and sample_index % DEBUG_SUMMARY_EVERY_N == 0:
+            debug_payload = build_debug_sensor_payload(
+                user_id=current_profile["user_id"],
+                raw_packet=raw_packet,
+                semantic_packet=semantic_packet,
+                feature_map=feature_map,
+                delta_map=delta_map,
+            )
+            app_server.update_status(debug_payload)
+
+        if DEBUG_FEATURES and sample_index % DEBUG_SUMMARY_EVERY_N == 0:
+            print(
+                "[DEBUG FEATURE]",
+                {
+                    "sample_index": sample_index,
+                    "seat_fb_shift": round(feature_map["seat_fb_shift"], 3),
+                    "neck_mean": round(feature_map["neck_mean"], 3),
+                    "neck_forward_delta": round(feature_map["neck_forward_delta"], 3),
+                    "spine_curve": round(feature_map["spine_curve"], 3),
+                    "pitch_fused_deg": round(feature_map["pitch_fused_deg"], 3),
+                    "back_total": round(feature_map["back_total"], 3),
+                    "neck_mean_delta": round(delta_map.get("neck_mean_delta", 0.0), 3),
+                    "neck_forward_delta_delta": round(
+                        delta_map.get("neck_forward_delta_delta", 0.0), 3
+                    ),
+                }
+            )
 
         predicted = classifier.predict(features)
         flags = detect_posture_flags(feature_map, delta_map)
@@ -270,6 +303,14 @@ def run_measurement_loop(
             flags=flags,
             feature_map=feature_map,
         )
+
+        old_report_posture = prev_report_posture
+        posture_changed = (
+            old_report_posture is not None
+            and old_report_posture != report_posture
+        )
+        runtime_context["prev_report_posture"] = report_posture
+        prev_report_posture = report_posture
 
         sample_logger.log_sample(
             user_id=current_profile["user_id"],
@@ -321,10 +362,38 @@ def run_measurement_loop(
         app_server.update_status(realtime_payload)
 
         active_flags = [k for k, v in flags.items() if v]
-        print(f"[DEBUG FLAGS] {flags}")
+        
+        if DEBUG_FLAGS and sample_index % DEBUG_SUMMARY_EVERY_N == 0:
+            print(
+                "[DEBUG FLAGS]",
+                {
+                    "sample_index": sample_index,
+                    "predicted": predicted,
+                    "report_posture": report_posture,
+                    "active_flags": active_flags,
+                }
+            )
+
+        if posture_changed:
+            print(
+                "[SNAPSHOT][POSTURE_CHANGED]",
+                {
+                    "sample_index": sample_index,
+                    "prev_report_posture": old_report_posture,
+                    "report_posture": report_posture,
+                    "active_flags": active_flags,
+                    "seat_fb_shift": round(feature_map["seat_fb_shift"], 3),
+                    "neck_mean": round(feature_map["neck_mean"], 3),
+                    "neck_forward_delta": round(feature_map["neck_forward_delta"], 3),
+                    "spine_curve": round(feature_map["spine_curve"], 3),
+                    "pitch_fused_deg": round(feature_map["pitch_fused_deg"], 3),
+                    "back_total": round(feature_map["back_total"], 3),
+                }
+            )
 
         print(
-            f"[REAL] predicted={predicted} ({to_display_label(predicted)}) | "
+            f"[REAL] sample={sample_index} | "
+            f"predicted={predicted} ({to_display_label(predicted)}) | "
             f"report_posture={report_posture} | "
             f"flags={active_flags} | "
             f"score={state['score']} | "
@@ -332,7 +401,13 @@ def run_measurement_loop(
             f"alert={state['alert']} | "
             f"alert_stage={state['alert_stage']} | "
             f"penalty={state['penalty_applied']} | "
+            f"pitch={round(feature_map['pitch_fused_deg'], 2)} | "
+            f"seat_fb={round(feature_map['seat_fb_shift'], 3)} | "
+            f"back_total={round(feature_map['back_total'], 2)} | "
+            f"neck_mean={round(feature_map['neck_mean'], 2)} | "
             f"loadcell={metrics['loadcell']['balance_score']}({metrics['loadcell']['balance_level']}) | "
             f"spine_tof={metrics['spine_tof']['score']}({metrics['spine_tof']['level']}) | "
-            f"neck_tof={metrics['neck_tof']['score']}({metrics['neck_tof']['level']})"
+            f"neck_tof={metrics['neck_tof']['score']}({metrics['neck_tof']['level']}) | "
+            f"chk_fail={receiver.checksum_fail_count} | "
+            f"parse_fail={receiver.parse_fail_count}"
         )

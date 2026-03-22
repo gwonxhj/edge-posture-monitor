@@ -74,3 +74,40 @@ def build_meta_payload(stage, extra=None):
     if extra:
         payload.update(extra)
     return payload
+
+def build_debug_sensor_payload(user_id, raw_packet, semantic_packet, feature_map, delta_map=None):
+    tof_3d = raw_packet.get("tof_3d", [])
+    loadcell = raw_packet.get("loadcell", [])
+    mpu = raw_packet.get("mpu", [])
+    delta_map = delta_map or {}
+
+    return {
+        "type": "debug_sensor",
+        "user_id": user_id,
+        "timestamp": int(time.time()),
+        "raw": {
+            "loadcell_sum": sum(loadcell),
+            "tof_1d": raw_packet.get("tof_1d", []),
+            "tof_3d_min": min(tof_3d) if tof_3d else 0,
+            "tof_3d_max": max(tof_3d) if tof_3d else 0,
+            "tof_3d_mean": round(sum(tof_3d) / len(tof_3d), 3) if tof_3d else 0.0,
+            "mpu": mpu,
+        },
+        "semantic": {
+            "pitch_fused_deg": round(semantic_packet["imu"]["pitch_fused_deg"], 3),
+            "back_total": round(feature_map["back_total"], 3),
+            "seat_fb_shift": round(feature_map["seat_fb_shift"], 3),
+            "back_lr_diff": round(feature_map["back_lr_diff"], 3),
+            "seat_lr_diff": round(feature_map["seat_lr_diff"], 3),
+            "neck_mean": round(feature_map["neck_mean"], 3),
+            "neck_forward_delta": round(feature_map["neck_forward_delta"], 3),
+            "spine_curve": round(feature_map["spine_curve"], 3),
+        },
+        "delta": {
+            "seat_fb_shift_delta": round(delta_map.get("seat_fb_shift_delta", 0.0), 3),
+            "neck_mean_delta": round(delta_map.get("neck_mean_delta", 0.0), 3),
+            "neck_forward_delta_delta": round(delta_map.get("neck_forward_delta_delta", 0.0), 3),
+            "spine_curve_delta": round(delta_map.get("spine_curve_delta", 0.0), 3),
+            "pitch_fused_deg_delta": round(delta_map.get("pitch_fused_deg_delta", 0.0), 3),
+        },
+    }
