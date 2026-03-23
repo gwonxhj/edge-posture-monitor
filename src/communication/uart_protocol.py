@@ -9,18 +9,18 @@ SERIAL_PORT = "/dev/serial0"
 # 128 bytes data packet + 1 byte checksum = 129 bytes total frame
 #
 # Data packet format:
-#   <4s 12i 4H 32H 2h
+#   <4s 12i 32H 4H 2h
 #
 # 4s   : header -> b"DAT:" or b"CAL:"
 # 12i  : loadcell 12 channels (int32)
-# 4H   : 1D ToF 4 channels (uint16)
 # 32H  : 3D ToF 32 channels (uint16)
+# 4H   : 1D ToF 4 channels (uint16)
 # 2h   : MPU6050 pitch angles 2 channels (int16, degree)
 # -------------------------------------------------------------------
 
 SENSOR_PACKET_DATA_SIZE = 128
 SENSOR_FRAME_SIZE = 129  # 128 data + 1 checksum
-UNPACK_FORMAT = "<4s 12i 4H 32H 2h"
+UNPACK_FORMAT = "<4s 12i 32H 4H 2h"
 
 HEADER_DAT = b"DAT:"
 HEADER_CAL = b"CAL:"

@@ -65,8 +65,10 @@ def receive_pure_data():
 
                 header = unpacked[0].decode('utf-8')
                 hx711 = unpacked[1:13]
-                tof1d = unpacked[13:17]
-                tof3d = unpacked[17:49]
+
+                tof3d = unpacked[13:45]   # 32개
+                tof1d = unpacked[45:49]   # 4개
+                
                 mpu = unpacked[49:51]
 
                 packet_count += 1
