@@ -11,6 +11,7 @@ from src.communication.app_payload_builder import (
     build_realtime_payload,
     build_stand_event_payload,
     build_debug_sensor_payload,
+    build_sensor_distribution_payload,
 )
 from src.communication.app_command_handler import handle_app_command
 from src.communication.uart_protocol import MSG_CAL_DONE
@@ -184,6 +185,8 @@ def run_measurement_loop(
                     time.sleep(SIT_TO_NEXT_CMD_DELAY_SEC)
 
                 sender.send_go()
+                print("[Measurement] recalibration completed, measurement resumed")
+                continue
 
         raw_packet = receiver.read_sensor_packet()
         if raw_packet is None:
@@ -224,6 +227,7 @@ def run_measurement_loop(
                     app_server=app_server,
                     session_manager=session_manager,
                     db_manager=db_manager,
+                    sender=sender,
                 )
 
                 if decision == "decline_resume_after_stand":
@@ -385,6 +389,17 @@ def run_measurement_loop(
             monitoring_metrics=metrics,
         )
         app_server.update_status(realtime_payload)
+
+        if sample_index % 10 == 0:
+            distribution_payload = build_sensor_distribution_payload(
+                user_id=current_profile["user_id"],
+                session_id=session_id,
+                sample_index=sample_index,
+                raw_packet=raw_packet,
+                feature_map=feature_map,
+                semantic_packet=semantic_packet,
+            )
+            app_server.update_status(distribution_payload)
 
         active_flags = [k for k, v in flags.items() if v]
         
