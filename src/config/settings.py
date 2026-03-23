@@ -4,7 +4,7 @@ import os
 # -----------------------------
 # UART / Runtime
 # -----------------------------
-UART_PORT = os.getenv("POSTURE_UART_PORT", "/dev/serial0")
+UART_PORT = os.getenv("POSTURE_UART_PORT", "/dev/ttyAMA0")
 UART_BAUD = int(os.getenv("POSTURE_UART_BAUD", "921600"))
 UART_MOCK_MODE = os.getenv("POSTURE_UART_MOCK", "0") == "1"
 

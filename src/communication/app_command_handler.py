@@ -14,6 +14,13 @@ ALLOWED_STAGE_BY_COMMAND = {
         S.UART_LINK_READY,
         S.PROFILE_LOADED,
     ],
+    "debug_send_chk_sit": [
+        S.UART_LINK_READY,
+        S.PROFILE_LOADED,
+        S.WAIT_START_DECISION,
+        S.MEASURING,
+        S.PAUSED,
+    ],
     "start_calibration": [
         S.PROFILE_LOADED,
         S.WAIT_CALIBRATION_DECISION,
@@ -57,7 +64,7 @@ ALLOWED_STAGE_BY_COMMAND = {
 }
 
 
-def handle_app_command(cmd: dict, session_manager, db_manager, app_server):
+def handle_app_command(cmd: dict, session_manager, db_manager, app_server, sender):
     """
     앱에서 온 command 처리
 
@@ -343,6 +350,16 @@ def handle_app_command(cmd: dict, session_manager, db_manager, app_server):
         return {
             "action": "decline_resume_after_stand",
             "message": "resume_declined",
+        }
+    
+    # -------------------------------------------------
+    # DEBUG: CHK_SIT 직접 전송
+    # -------------------------------------------------
+    elif command == "debug_send_chk_sit":
+        sender.send_check_sit()
+        return {
+            "action": "debug_send_chk_sit",
+            "message": "CHK_SIT sent",
         }
 
     return {

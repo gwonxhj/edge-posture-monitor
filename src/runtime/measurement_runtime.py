@@ -100,6 +100,7 @@ def run_measurement_loop(
                 session_manager=session_manager,
                 db_manager=db_manager,
                 app_server=app_server,
+                sender=sender,
             )
             print("[APP CMD RESULT]", result)
 
