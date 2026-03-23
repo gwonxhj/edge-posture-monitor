@@ -139,6 +139,10 @@ def run_measurement_loop(
                 # 2. 착석 확인
                 wait_until_sit_detected(receiver, sender)
 
+                if SIT_TO_NEXT_CMD_DELAY_SEC > 0:
+                    print(f"[Measurement] SIT 확인 후 CAL 전 {SIT_TO_NEXT_CMD_DELAY_SEC:.3f}s 대기")
+                    time.sleep(SIT_TO_NEXT_CMD_DELAY_SEC)
+
                 # 3. CAL 요청
                 sender.send_cal()
 
