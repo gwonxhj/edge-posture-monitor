@@ -2,7 +2,7 @@ from src.communication import session_state as S
 from src.communication.app_command_handler import handle_app_command
 
 
-def wait_for_app_profile_command(app_server, session_manager, db_manager):
+def wait_for_app_profile_command(app_server, session_manager, db_manager, sender):
     print("[APP] profile command 대기 중...")
 
     while True:
@@ -15,6 +15,7 @@ def wait_for_app_profile_command(app_server, session_manager, db_manager):
             session_manager=session_manager,
             db_manager=db_manager,
             app_server=app_server,
+            sender=sender,
         )
 
         if result["action"] == "profile_loaded":
