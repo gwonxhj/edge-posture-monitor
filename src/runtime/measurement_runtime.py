@@ -261,6 +261,23 @@ def run_measurement_loop(
         sample_index += 1
         runtime_context["sample_index"] = sample_index
 
+        if sample_index % 100 == 0:
+            print(f"[HEARTBEAT] DAT stream alive | sample={sample_index}")
+
+        if DEBUG_SENSOR_RAW and sample_index % DEBUG_SUMMARY_EVERY_N == 0:
+            print(
+                "[RAW SUMMARY]",
+                {
+                    "sample_index": sample_index,
+                    "frame_type": raw_packet.get("frame_type"),
+                    "loadcell_sum": sum(raw_packet.get("loadcell", [])),
+                    "tof_1d": raw_packet.get("tof_1d", []),
+                    "tof_3d_len": len(raw_packet.get("tof_3d", [])),
+                    "mpu": raw_packet.get("mpu", []),
+                }
+            )
+
+
         semantic_packet = map_raw_packet(raw_packet)
 
         extracted = extract_features(semantic_packet, baseline=baseline)
