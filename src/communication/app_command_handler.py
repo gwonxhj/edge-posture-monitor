@@ -179,10 +179,22 @@ def handle_app_command(cmd: dict, session_manager, db_manager, app_server, sende
 
         profile_info = session_manager.select_or_create_user(user_id=user_id)
 
+        profile = profile_info["profile"]
+
+        db_manager.upsert_user(
+            user_id=profile["user_id"],
+            name=profile["name"],
+            height_cm=profile["height_cm"],
+            weight_kg=profile["weight_kg"],
+            rest_work_min=profile["rest_work_min"],
+            rest_break_min=profile["rest_break_min"],
+            sensitivity=profile.get("sensitivity", "normal"),
+        )
+
         app_server.update_meta({
             "stage": S.PROFILE_LOADED,
-            "user_id": profile_info["profile"]["user_id"],
-            "user_name": profile_info["profile"]["name"],
+            "user_id": profile["user_id"],
+            "user_name": profile["name"],
         })
 
         return {
