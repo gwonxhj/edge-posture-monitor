@@ -199,6 +199,7 @@ def main():
             app_server=app_server,
             session_manager=session_manager,
             db_manager=db_manager,
+            sender=sender,
         )
 
         session_manager.start_session()
