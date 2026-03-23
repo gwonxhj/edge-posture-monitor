@@ -24,7 +24,7 @@ def wait_for_app_profile_command(app_server, session_manager, db_manager, sender
         print("[APP CMD RESULT]", result)
 
 
-def wait_for_calibration_decision(app_server, session_manager, db_manager):
+def wait_for_calibration_decision(app_server, session_manager, db_manager, sender):
     app_server.update_meta({
         "stage": S.WAIT_CALIBRATION_DECISION,
     })
@@ -40,6 +40,7 @@ def wait_for_calibration_decision(app_server, session_manager, db_manager):
             session_manager=session_manager,
             db_manager=db_manager,
             app_server=app_server,
+            sender=sender,
         )
         print("[APP CMD RESULT]", result)
 
@@ -50,7 +51,7 @@ def wait_for_calibration_decision(app_server, session_manager, db_manager):
             return "skip_calibration"
 
 
-def wait_for_start_measurement_command(app_server, session_manager, db_manager):
+def wait_for_start_measurement_command(app_server, session_manager, db_manager, sender):
     app_server.update_meta({
         "stage": S.WAIT_START_DECISION,
     })
@@ -66,6 +67,7 @@ def wait_for_start_measurement_command(app_server, session_manager, db_manager):
             session_manager=session_manager,
             db_manager=db_manager,
             app_server=app_server,
+            sender=sender,
         )
         print("[APP CMD RESULT]", result)
 
@@ -76,7 +78,7 @@ def wait_for_start_measurement_command(app_server, session_manager, db_manager):
             return "cancel"
 
 
-def wait_for_restart_decision(app_server, session_manager, db_manager):
+def wait_for_restart_decision(app_server, session_manager, db_manager, sender):
     app_server.update_meta({
         "stage": S.WAIT_RESTART_DECISION,
     })
@@ -92,6 +94,7 @@ def wait_for_restart_decision(app_server, session_manager, db_manager):
             session_manager=session_manager,
             db_manager=db_manager,
             app_server=app_server,
+            sender=sender,
         )
         print("[APP CMD RESULT]", result)
 
@@ -104,7 +107,7 @@ def wait_for_restart_decision(app_server, session_manager, db_manager):
         if result["action"] == "quit_measurement":
             return "quit_measurement"
         
-def wait_for_resume_or_quit_command(app_server, session_manager, db_manager):
+def wait_for_resume_or_quit_command(app_server, session_manager, db_manager, sender):
     app_server.update_meta({
         "stage": S.PAUSED,
     })
@@ -120,6 +123,7 @@ def wait_for_resume_or_quit_command(app_server, session_manager, db_manager):
             session_manager=session_manager,
             db_manager=db_manager,
             app_server=app_server,
+            sender=sender,
         )
         print("[APP CMD RESULT]", result)
 

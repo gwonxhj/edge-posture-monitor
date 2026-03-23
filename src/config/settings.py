@@ -11,6 +11,16 @@ UART_MOCK_MODE = os.getenv("POSTURE_UART_MOCK", "0") == "1"
 SAMPLE_RATE_HZ = int(os.getenv("POSTURE_SAMPLE_RATE_HZ", "50"))
 CALIBRATION_DURATION_SEC = int(os.getenv("POSTURE_CALIBRATION_SEC", "10"))
 
+# READY 수신 후 ACK 보내기 전 대기
+HANDSHAKE_AFTER_READY_DELAY_SEC = float(
+    os.getenv("POSTURE_HANDSHAKE_AFTER_READY_DELAY_SEC", "0.2")
+)
+
+# SIT 확인 후 다음 명령(CAL/GO) 보내기 전 대기
+SIT_TO_NEXT_CMD_DELAY_SEC = float(
+    os.getenv("POSTURE_SIT_TO_NEXT_CMD_DELAY_SEC", "0.2")
+)
+
 
 # -----------------------------
 # Debug / Logging

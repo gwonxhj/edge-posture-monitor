@@ -4,6 +4,7 @@ Realtime measurement runtime loop.
 실시간 DAT packet 처리, STAND 이벤트 처리,
 앱 command 처리, 자세 분석 및 리포트 누적을 담당한다.
 """
+import time
 
 from src.communication import session_state as S
 from src.communication.app_payload_builder import (
@@ -29,6 +30,7 @@ from src.config.settings import (
     DEBUG_FLAGS,
     DEBUG_SENSOR_RAW,
     DEBUG_SUMMARY_EVERY_N,
+    SIT_TO_NEXT_CMD_DELAY_SEC,
 )
 
 
@@ -177,10 +179,11 @@ def run_measurement_loop(
                 })
 
                 # 10. 측정 재개
-                sender.send_go()
+                if SIT_TO_NEXT_CMD_DELAY_SEC > 0:
+                    print(f"[Measurement] baseline 교체 후 GO 전 {SIT_TO_NEXT_CMD_DELAY_SEC:.3f}s 대기")
+                    time.sleep(SIT_TO_NEXT_CMD_DELAY_SEC)
 
-                print("[Measurement] recalibration completed, measurement resumed")
-                continue
+                sender.send_go()
 
         raw_packet = receiver.read_sensor_packet()
         if raw_packet is None:
@@ -246,6 +249,11 @@ def run_measurement_loop(
                 if decision == "resume_after_stand":
                     print("재시작 요청 -> CHK_SIT 전송")
                     wait_until_sit_detected(receiver, sender)
+
+                    if SIT_TO_NEXT_CMD_DELAY_SEC > 0:
+                        print(f"[Measurement] SIT 확인 후 GO 전 {SIT_TO_NEXT_CMD_DELAY_SEC:.3f}s 대기")
+                        time.sleep(SIT_TO_NEXT_CMD_DELAY_SEC)
+
                     sender.send_go()
 
                     app_server.update_meta({
@@ -253,7 +261,6 @@ def run_measurement_loop(
                     })
                     print("측정 재개")
                     continue
-
             continue
 
         if raw_packet.get("frame_type") != "DAT":

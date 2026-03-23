@@ -1,8 +1,11 @@
+import time
+
 from src.communication import session_state as S
 from src.communication.uart_protocol import MSG_CAL_DONE
 from src.sensor.sensor_mapper import map_raw_packet
 from src.core.feature_extractor import extract_features
 from src.app_flow.sit_detector import wait_until_sit_detected
+from src.config.settings import SIT_TO_NEXT_CMD_DELAY_SEC
 
 
 def run_calibration_flow(
@@ -24,11 +27,16 @@ def run_calibration_flow(
 
     wait_until_sit_detected(receiver, sender)
 
+    if SIT_TO_NEXT_CMD_DELAY_SEC > 0:
+        print(f"[RPi] SIT 확인 후 {SIT_TO_NEXT_CMD_DELAY_SEC:.3f}s 대기")
+        time.sleep(SIT_TO_NEXT_CMD_DELAY_SEC)
+
     print("착석 확인 완료. 캘리브레이션 시작")
     app_server.update_meta({
         "stage": S.CALIBRATING,
         "calibration_reason": calibration_reason,
     })
+
     sender.send_cal()
 
     baseline = calibration_manager.run_calibration_loop(
