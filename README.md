@@ -516,6 +516,7 @@ tools/fake_stm32.py
 - docs/system_architecture.md
 - docs/api_spec.md
 - docs/test_checklist.md
+- docs/development_stages.md
 
 ---
 
