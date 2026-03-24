@@ -38,6 +38,13 @@ ENABLE_SAMPLE_LOGGER = os.getenv("POSTURE_ENABLE_SAMPLE_LOGGER", "1") == "1"
 # -----------------------------
 REPORT_ENGINE = os.getenv("POSTURE_REPORT_ENGINE", "rule")
 LLM_REPORT_MODE = os.getenv("POSTURE_LLM_REPORT_MODE", "mock")
+
+LLM_REPORT_MODE = os.getenv("POSTURE_LLM_REPORT_MODE", "mock")
+LLM_MODEL_BACKEND = os.getenv("POSTURE_LLM_MODEL_BACKEND", "llama_cpp")
+LLM_GGUF_MODEL_PATH = os.getenv("POSTURE_LLM_GGUF_MODEL_PATH", "")
+LLM_CONTEXT_LEN = int(os.getenv("POSTURE_LLM_CONTEXT_LEN", "2048"))
+LLM_MAX_TOKENS = int(os.getenv("POSTURE_LLM_MAX_TOKENS", "256"))
+LLM_TEMPERATURE = float(os.getenv("POSTURE_LLM_TEMPERATURE", "0.2"))
 # REPORT_ENGINE:
 # - "rule": 기존 rule-based 리포트
 # - "llm" : LLM-ready 리포트 엔진
