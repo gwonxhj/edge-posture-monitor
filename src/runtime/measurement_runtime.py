@@ -281,12 +281,30 @@ def run_measurement_loop(
             print(f"[HEARTBEAT] DAT stream alive | sample={sample_index}")
 
         if DEBUG_SENSOR_RAW and sample_index % DEBUG_SUMMARY_EVERY_N == 0:
+            loadcell = raw_packet.get("loadcell", [])
+
+            loadcell_named = {
+                "back_right_top": loadcell[0] if len(loadcell) > 0 else None,
+                "back_right_upper_mid": loadcell[1] if len(loadcell) > 1 else None,
+                "back_right_lower_mid": loadcell[2] if len(loadcell) > 2 else None,
+                "back_right_bottom": loadcell[3] if len(loadcell) > 3 else None,
+                "back_left_top": loadcell[4] if len(loadcell) > 4 else None,
+                "back_left_upper_mid": loadcell[5] if len(loadcell) > 5 else None,
+                "back_left_lower_mid": loadcell[6] if len(loadcell) > 6 else None,
+                "back_left_bottom": loadcell[7] if len(loadcell) > 7 else None,
+                "seat_rear_right": loadcell[8] if len(loadcell) > 8 else None,
+                "seat_front_right": loadcell[9] if len(loadcell) > 9 else None,
+                "seat_rear_left": loadcell[10] if len(loadcell) > 10 else None,
+                "seat_front_left": loadcell[11] if len(loadcell) > 11 else None,
+            }
+
             print(
                 "[RAW SUMMARY]",
                 {
                     "sample_index": sample_index,
                     "frame_type": raw_packet.get("frame_type"),
-                    "loadcell_sum": sum(raw_packet.get("loadcell", [])),
+                    "loadcell_named": loadcell_named,
+                    "loadcell_sum": sum(loadcell),
                     "tof_1d": raw_packet.get("tof_1d", []),
                     "tof_3d_len": len(raw_packet.get("tof_3d", [])),
                     "mpu": raw_packet.get("mpu", []),
@@ -309,7 +327,8 @@ def run_measurement_loop(
                 feature_map=feature_map,
                 delta_map=delta_map,
             )
-            app_server.update_status(debug_payload)
+            print("[DEBUG SENSOR PAYLOAD]")
+            print(debug_payload)
 
         if DEBUG_FEATURES and sample_index % DEBUG_SUMMARY_EVERY_N == 0:
             print(
