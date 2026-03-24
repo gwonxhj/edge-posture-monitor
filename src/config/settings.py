@@ -37,9 +37,14 @@ ENABLE_SAMPLE_LOGGER = os.getenv("POSTURE_ENABLE_SAMPLE_LOGGER", "1") == "1"
 # Report / Future extension
 # -----------------------------
 REPORT_ENGINE = os.getenv("POSTURE_REPORT_ENGINE", "rule")
-# 현재는 "rule"만 사용
-# 향후 "llm" 지원 시 여기서 스위치
-
+LLM_REPORT_MODE = os.getenv("POSTURE_LLM_REPORT_MODE", "mock")
+# REPORT_ENGINE:
+# - "rule": 기존 rule-based 리포트
+# - "llm" : LLM-ready 리포트 엔진
+#
+# LLM_REPORT_MODE:
+# - "mock": 실제 LLM 호출 없이 mock LLM 형태로 동작
+# 향후 OpenAI / local LLM 연결 시 여기서 모드 확장 가능
 
 # -----------------------------
 # Classifier behavior
