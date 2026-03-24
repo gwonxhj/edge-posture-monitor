@@ -67,16 +67,11 @@ ALLOWED_STAGE_BY_COMMAND = {
 def handle_app_command(cmd: dict, session_manager, db_manager, app_server, sender):
     """
     앱에서 온 command 처리
-
-    반환 예시:
-    {
-        "action": "profile_loaded",
-        "message": "existing_profile_loaded",
-        "profile_info": {...}
-    }
     """
+    print("[CMD HANDLER] incoming cmd:", cmd)
 
     if not cmd or "cmd" not in cmd:
+        print("[CMD HANDLER] invalid command payload")
         return {
             "action": "noop",
             "message": "invalid_command",
@@ -88,10 +83,18 @@ def handle_app_command(cmd: dict, session_manager, db_manager, app_server, sende
     # stage validation
     # -------------------------------------------------
     current_stage = app_server.latest_meta_payload.get("stage")
-
     allowed_stages = ALLOWED_STAGE_BY_COMMAND.get(command)
 
+    print(
+        "[CMD HANDLER] stage check | "
+        f"command={command} | current_stage={current_stage} | allowed={allowed_stages}"
+    )
+
     if allowed_stages is not None and current_stage not in allowed_stages:
+        print(
+            "[CMD HANDLER] rejected | "
+            f"command={command} | reason=invalid_stage | current_stage={current_stage}"
+        )
         return {
             "action": "error",
             "message": "invalid_stage",
@@ -115,6 +118,7 @@ def handle_app_command(cmd: dict, session_manager, db_manager, app_server, sende
 
         for key in required_keys:
             if key not in cmd:
+                print(f"[CMD HANDLER] submit_profile missing field: {key}")
                 return {
                     "action": "error",
                     "message": f"missing_field:{key}",
@@ -153,6 +157,11 @@ def handle_app_command(cmd: dict, session_manager, db_manager, app_server, sende
             "user_name": profile_info["profile"]["name"],
         })
 
+        print(
+            "[CMD HANDLER] profile loaded | "
+            f"user_id={profile_info['profile']['user_id']} | mode=new"
+        )
+
         return {
             "action": "profile_loaded",
             "message": "new_profile_registered",
@@ -164,6 +173,7 @@ def handle_app_command(cmd: dict, session_manager, db_manager, app_server, sende
     # -------------------------------------------------
     elif command == "select_profile":
         if "user_id" not in cmd:
+            print("[CMD HANDLER] select_profile missing user_id")
             return {
                 "action": "error",
                 "message": "missing_field:user_id",
@@ -172,13 +182,13 @@ def handle_app_command(cmd: dict, session_manager, db_manager, app_server, sende
         user_id = cmd["user_id"]
 
         if not session_manager.profile_manager.user_exists(user_id):
+            print(f"[CMD HANDLER] select_profile failed | profile_not_found | user_id={user_id}")
             return {
                 "action": "error",
                 "message": "profile_not_found",
             }
 
         profile_info = session_manager.select_or_create_user(user_id=user_id)
-
         profile = profile_info["profile"]
 
         db_manager.upsert_user(
@@ -197,6 +207,11 @@ def handle_app_command(cmd: dict, session_manager, db_manager, app_server, sende
             "user_name": profile["name"],
         })
 
+        print(
+            "[CMD HANDLER] profile loaded | "
+            f"user_id={profile['user_id']} | mode=existing"
+        )
+
         return {
             "action": "profile_loaded",
             "message": "existing_profile_loaded",
@@ -209,6 +224,7 @@ def handle_app_command(cmd: dict, session_manager, db_manager, app_server, sende
     elif command == "start_calibration":
         current_profile = session_manager.get_current_profile()
         if current_profile is None:
+            print("[CMD HANDLER] start_calibration failed | no_profile_selected")
             return {
                 "action": "error",
                 "message": "no_profile_selected",
@@ -219,6 +235,7 @@ def handle_app_command(cmd: dict, session_manager, db_manager, app_server, sende
             "calibration_reason": "initial",
         })
 
+        print("[CMD HANDLER] action=start_calibration")
         return {
             "action": "start_calibration",
             "message": "calibration_requested",
@@ -230,6 +247,7 @@ def handle_app_command(cmd: dict, session_manager, db_manager, app_server, sende
     elif command == "skip_calibration":
         current_profile = session_manager.get_current_profile()
         if current_profile is None:
+            print("[CMD HANDLER] skip_calibration failed | no_profile_selected")
             return {
                 "action": "error",
                 "message": "no_profile_selected",
@@ -237,6 +255,7 @@ def handle_app_command(cmd: dict, session_manager, db_manager, app_server, sende
 
         baseline = session_manager.get_current_baseline()
         if baseline is None:
+            print("[CMD HANDLER] skip_calibration failed | baseline_required")
             return {
                 "action": "error",
                 "message": "baseline_required",
@@ -246,6 +265,7 @@ def handle_app_command(cmd: dict, session_manager, db_manager, app_server, sende
             "stage": S.WAIT_START_DECISION,
         })
 
+        print("[CMD HANDLER] action=skip_calibration")
         return {
             "action": "skip_calibration",
             "message": "calibration_skipped",
@@ -257,6 +277,7 @@ def handle_app_command(cmd: dict, session_manager, db_manager, app_server, sende
     elif command == "start_measurement":
         current_profile = session_manager.get_current_profile()
         if current_profile is None:
+            print("[CMD HANDLER] start_measurement failed | no_profile_selected")
             return {
                 "action": "error",
                 "message": "no_profile_selected",
@@ -264,6 +285,7 @@ def handle_app_command(cmd: dict, session_manager, db_manager, app_server, sende
 
         baseline = session_manager.get_current_baseline()
         if baseline is None:
+            print("[CMD HANDLER] start_measurement failed | baseline_required")
             return {
                 "action": "error",
                 "message": "baseline_required",
@@ -273,6 +295,7 @@ def handle_app_command(cmd: dict, session_manager, db_manager, app_server, sende
             "stage": S.WAIT_SIT_FOR_MEASURE,
         })
 
+        print("[CMD HANDLER] action=start_measurement")
         return {
             "action": "start_measurement",
             "message": "measurement_requested",
@@ -286,6 +309,7 @@ def handle_app_command(cmd: dict, session_manager, db_manager, app_server, sende
             "stage": S.MEASUREMENT_STOP_REQUESTED,
         })
 
+        print("[CMD HANDLER] action=pause_measurement")
         return {
             "action": "pause_measurement",
             "message": "measurement_pause_requested",
@@ -299,11 +323,12 @@ def handle_app_command(cmd: dict, session_manager, db_manager, app_server, sende
             "stage": S.MEASUREMENT_STOP_REQUESTED,
         })
 
+        print("[CMD HANDLER] action=quit_measurement")
         return {
             "action": "quit_measurement",
             "message": "measurement_quit_requested",
         }
-    
+
     # -------------------------------------------------
     # 측정 재개 요청
     # -------------------------------------------------
@@ -312,6 +337,7 @@ def handle_app_command(cmd: dict, session_manager, db_manager, app_server, sende
             "stage": S.WAIT_SIT_FOR_MEASURE,
         })
 
+        print("[CMD HANDLER] action=resume_measurement")
         return {
             "action": "resume_measurement",
             "message": "measurement_resume_requested",
@@ -323,6 +349,7 @@ def handle_app_command(cmd: dict, session_manager, db_manager, app_server, sende
     elif command == "request_recalibration":
         current_profile = session_manager.get_current_profile()
         if current_profile is None:
+            print("[CMD HANDLER] request_recalibration failed | no_profile_selected")
             return {
                 "action": "error",
                 "message": "no_profile_selected",
@@ -333,6 +360,7 @@ def handle_app_command(cmd: dict, session_manager, db_manager, app_server, sende
             "calibration_reason": "recalibration",
         })
 
+        print("[CMD HANDLER] action=request_recalibration")
         return {
             "action": "start_calibration",
             "message": "recalibration_requested",
@@ -346,6 +374,7 @@ def handle_app_command(cmd: dict, session_manager, db_manager, app_server, sende
             "stage": S.WAIT_SIT_FOR_MEASURE,
         })
 
+        print("[CMD HANDLER] action=resume_after_stand")
         return {
             "action": "resume_after_stand",
             "message": "resume_requested",
@@ -359,21 +388,24 @@ def handle_app_command(cmd: dict, session_manager, db_manager, app_server, sende
             "stage": S.MEASUREMENT_STOP_REQUESTED,
         })
 
+        print("[CMD HANDLER] action=decline_resume_after_stand")
         return {
             "action": "decline_resume_after_stand",
             "message": "resume_declined",
         }
-    
+
     # -------------------------------------------------
     # DEBUG: CHK_SIT 직접 전송
     # -------------------------------------------------
     elif command == "debug_send_chk_sit":
+        print("[CMD HANDLER] action=debug_send_chk_sit -> UART TX 예정")
         sender.send_check_sit()
         return {
             "action": "debug_send_chk_sit",
             "message": "CHK_SIT sent",
         }
 
+    print(f"[CMD HANDLER] unknown_command={command}")
     return {
         "action": "noop",
         "message": f"unknown_command:{command}",
