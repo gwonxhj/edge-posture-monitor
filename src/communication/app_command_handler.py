@@ -45,6 +45,7 @@ ALLOWED_STAGE_BY_COMMAND = {
     ],
     "quit_measurement": [
         S.MEASURING,
+        S.PAUSED,
         S.WAIT_START_DECISION,
         S.CALIBRATION_COMPLETED,
         S.WAIT_RESTART_DECISION,
