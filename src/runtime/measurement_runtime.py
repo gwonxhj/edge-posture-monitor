@@ -26,6 +26,8 @@ from src.sensor.sensor_mapper import map_raw_packet
 from src.app_flow.sit_detector import wait_until_sit_detected
 from src.app_flow.app_flow_controller import wait_for_restart_decision
 
+from src.feedback.buzzer_feedback import BuzzerFeedback
+
 from src.config.settings import (
     DEBUG_FEATURES,
     DEBUG_FLAGS,
@@ -33,7 +35,6 @@ from src.config.settings import (
     DEBUG_SUMMARY_EVERY_N,
     SIT_TO_NEXT_CMD_DELAY_SEC,
 )
-
 
 
 def select_report_posture(predicted, flags, feature_map=None):
@@ -46,7 +47,6 @@ def select_report_posture(predicted, flags, feature_map=None):
     seat_fb_shift = feature_map.get("seat_fb_shift", 0.0)
     pitch_fused_deg = feature_map.get("pitch_fused_deg", 0.0)
 
-    # forward lean 강한 조건이면 turtle_neck보다 우선
     if flags.get("forward_lean") and (
         seat_fb_shift > 0.16 or pitch_fused_deg > 5.0
     ):
@@ -67,6 +67,7 @@ def select_report_posture(predicted, flags, feature_map=None):
 
     return predicted
 
+
 def run_measurement_loop(
     receiver,
     sender,
@@ -85,6 +86,8 @@ def run_measurement_loop(
     sample_logger,
 ):
     print("\n=== 실시간 측정 시작 ===")
+
+    buzzer = BuzzerFeedback()
 
     score_sum = runtime_context.get("score_sum", 0.0)
     score_count = runtime_context.get("score_count", 0)
@@ -110,6 +113,7 @@ def run_measurement_loop(
             if result["action"] == "pause_measurement":
                 print("앱에서 측정 일시정지 요청이 들어와서 STM32로 STOP 전송")
                 sender.send_stop()
+                buzzer.reset()
                 app_server.update_meta({
                     "stage": S.PAUSED,
                 })
@@ -120,10 +124,11 @@ def run_measurement_loop(
                     "posture_count": posture_count,
                     "latest_state": latest_state,
                 }
-                
+
             if result["action"] == "quit_measurement":
                 print("앱에서 측정 종료 요청이 들어와서 STM32로 STOP 전송")
                 sender.send_stop()
+                buzzer.reset()
                 return {
                     "result": "quit",
                     "score_sum": score_sum,
@@ -131,31 +136,30 @@ def run_measurement_loop(
                     "posture_count": posture_count,
                     "latest_state": latest_state,
                 }
-            
-            if result["action"] == "start_calibration":
-                # 1. 측정 일시 정지
-                sender.send_stop()
 
-                # 2. 착석 확인
+            if result["action"] == "start_calibration":
+                sender.send_stop()
+                buzzer.reset()
+
                 wait_until_sit_detected(receiver, sender)
 
                 if SIT_TO_NEXT_CMD_DELAY_SEC > 0:
-                    print(f"[Measurement] SIT 확인 후 CAL 전 {SIT_TO_NEXT_CMD_DELAY_SEC:.3f}s 대기")
+                    print(
+                        f"[Measurement] SIT 확인 후 CAL 전 "
+                        f"{SIT_TO_NEXT_CMD_DELAY_SEC:.3f}s 대기"
+                    )
                     time.sleep(SIT_TO_NEXT_CMD_DELAY_SEC)
 
-                # 3. CAL 요청
                 sender.send_cal()
 
-                # 4. stage 갱신
                 app_server.update_meta({
                     "stage": S.CALIBRATING,
                     "calibration_reason": app_server.latest_meta_payload.get(
-                        "calibration_reason", 
+                        "calibration_reason",
                         "recalibration",
                     ),
                 })
 
-                # 5. calibration 수행
                 new_baseline = calibration_manager.run_calibration_loop(
                     receiver=receiver,
                     mapper_func=map_raw_packet,
@@ -164,28 +168,22 @@ def run_measurement_loop(
                     verbose=True,
                 )
 
-                # 6. STM32의 CAL_DONE 확인
                 print("[Measurement] CAL_DONE 대기 중...")
                 receiver.wait_for_message(MSG_CAL_DONE, verbose=True)
 
-                # 7. baseline 저장
                 session_manager.save_baseline_for_current_user(new_baseline)
-
-                # 필요 시 DB 저장 로직 있으면 추가
-                # db_manager.save_baseline(...)
-
-                # 8. 현재 baseline 교체
                 baseline = new_baseline
 
-                # 9. 앱 meta 갱신
                 app_server.update_meta({
                     "stage": S.MEASURING,
                     "calibration_reason": None,
                 })
 
-                # 10. 측정 재개
                 if SIT_TO_NEXT_CMD_DELAY_SEC > 0:
-                    print(f"[Measurement] baseline 교체 후 GO 전 {SIT_TO_NEXT_CMD_DELAY_SEC:.3f}s 대기")
+                    print(
+                        f"[Measurement] baseline 교체 후 GO 전 "
+                        f"{SIT_TO_NEXT_CMD_DELAY_SEC:.3f}s 대기"
+                    )
                     time.sleep(SIT_TO_NEXT_CMD_DELAY_SEC)
 
                 sender.send_go()
@@ -197,7 +195,7 @@ def run_measurement_loop(
             continue
 
         if (
-            receiver.checksum_fail_count > 0 
+            receiver.checksum_fail_count > 0
             and receiver.checksum_fail_count % 50 == 0
             and receiver.checksum_fail_count != last_checksum_warn
         ):
@@ -206,7 +204,7 @@ def run_measurement_loop(
             runtime_context["last_checksum_warn"] = last_checksum_warn
 
         if (
-            receiver.parse_fail_count > 0 
+            receiver.parse_fail_count > 0
             and receiver.parse_fail_count % 20 == 0
             and receiver.parse_fail_count != last_parse_warn
         ):
@@ -217,6 +215,7 @@ def run_measurement_loop(
         if raw_packet.get("frame_type") == "EVENT":
             if raw_packet.get("event") == "STAND":
                 print("[UART] STAND 이벤트 감지")
+                buzzer.reset()
 
                 stand_payload = build_stand_event_payload(
                     user_id=current_profile["user_id"]
@@ -236,6 +235,7 @@ def run_measurement_loop(
 
                 if decision == "decline_resume_after_stand":
                     print("사용자가 재시작을 거부하여 측정을 종료함.")
+                    buzzer.reset()
                     return {
                         "result": "stand_declined",
                         "score_sum": score_sum,
@@ -246,6 +246,7 @@ def run_measurement_loop(
 
                 if decision == "quit_measurement":
                     print("STAND 이후 사용자가 측정 종료를 요청함.")
+                    buzzer.reset()
                     return {
                         "result": "quit",
                         "score_sum": score_sum,
@@ -259,7 +260,10 @@ def run_measurement_loop(
                     wait_until_sit_detected(receiver, sender)
 
                     if SIT_TO_NEXT_CMD_DELAY_SEC > 0:
-                        print(f"[Measurement] SIT 확인 후 GO 전 {SIT_TO_NEXT_CMD_DELAY_SEC:.3f}s 대기")
+                        print(
+                            f"[Measurement] SIT 확인 후 GO 전 "
+                            f"{SIT_TO_NEXT_CMD_DELAY_SEC:.3f}s 대기"
+                        )
                         time.sleep(SIT_TO_NEXT_CMD_DELAY_SEC)
 
                     sender.send_go()
@@ -310,7 +314,6 @@ def run_measurement_loop(
                     "mpu": raw_packet.get("mpu", []),
                 }
             )
-
 
         semantic_packet = map_raw_packet(raw_packet)
 
@@ -425,7 +428,11 @@ def run_measurement_loop(
             app_server.update_status(distribution_payload)
 
         active_flags = [k for k, v in flags.items() if v]
-        
+
+        # normal 은 부저 활성 자세 목록에서 제외
+        active_bad_postures = {k for k, v in flags.items() if v and k != "normal"}
+        buzzer.update(active_bad_postures)
+
         if DEBUG_FLAGS and sample_index % DEBUG_SUMMARY_EVERY_N == 0:
             print(
                 "[DEBUG FLAGS]",
