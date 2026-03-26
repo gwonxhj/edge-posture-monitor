@@ -57,3 +57,41 @@ LLM_TEMPERATURE = float(os.getenv("POSTURE_LLM_TEMPERATURE", "0.2"))
 # Classifier behavior
 # -----------------------------
 CLASSIFIER_FALLBACK_TO_RULE = True
+
+# -----------------------------
+# Buzzer Feedback Settings
+# -----------------------------
+
+BUZZER_ENABLE = os.getenv("POSTURE_BUZZER_ENABLE", "1") == "1"
+
+# 최초 감지 후 알람 시작까지 대기 시간 (초)
+BUZZER_INITIAL_DELAY_SEC = float(
+    os.getenv("POSTURE_BUZZER_INITIAL_DELAY_SEC", "5.0")
+)
+
+# stage별 기본 interval (초)
+BUZZER_STAGE1_INTERVAL = float(
+    os.getenv("POSTURE_BUZZER_STAGE1_INTERVAL", "5.0")
+)
+BUZZER_STAGE2_INTERVAL = float(
+    os.getenv("POSTURE_BUZZER_STAGE2_INTERVAL", "3.0")
+)
+BUZZER_STAGE3_INTERVAL = float(
+    os.getenv("POSTURE_BUZZER_STAGE3_INTERVAL", "1.5")
+)
+
+# posture 개수 증가 시 가속 계수
+BUZZER_MULTI_POSTURE_FACTOR = float(
+    os.getenv("POSTURE_BUZZER_MULTI_POSTURE_FACTOR", "0.3")
+)
+
+# posture 위험도 weight
+BUZZER_WEIGHT_MAP = {
+    "turtle_neck": 1.0,
+    "forward_lean": 1.2,
+    "side_slouch": 1.1,
+    "perching": 1.3,
+    "leg_cross_suspect": 1.15,
+    "thinking_pose": 1.05,
+    "reclined": 1.1,
+}

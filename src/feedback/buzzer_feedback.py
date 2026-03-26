@@ -11,54 +11,63 @@ from src.config.settings import (
     BUZZER_WEIGHT_MAP,
 )
 
-BUZZER_CHIP = "/dev/gpiochip0"
-BUZZER_LINE_OFFSET = 18
+CHIP_PATH = "/dev/gpiochip0"
+LINE_OFFSET = 18
 
 
 class BuzzerFeedback:
     def __init__(self):
         self.current_postures = set()
         self.first_detect_time = None
-        self.last_beep_time = 0
+        self.last_beep_time = 0.0
         self.stage = 0
 
-        self.chip = gpiod.Chip(BUZZER_CHIP)
-        self.line = self.chip.get_line(BUZZER_LINE_OFFSET)
-        self.line.request(
+        self.chip = gpiod.Chip(CHIP_PATH)
+
+        line_settings = gpiod.LineSettings()
+        line_settings.direction = gpiod.line.Direction.OUTPUT
+
+        self.request = self.chip.request_lines(
             consumer="posture-buzzer",
-            type=gpiod.LINE_REQ_DIR_OUT,
-            default_vals=[0],
+            config={LINE_OFFSET: line_settings},
         )
+
+        self._off()
 
     def reset(self):
         self.current_postures = set()
         self.first_detect_time = None
-        self.last_beep_time = 0
+        self.last_beep_time = 0.0
         self.stage = 0
         self._off()
 
     def close(self):
         try:
             self._off()
-            self.line.release()
         except Exception:
             pass
+
+        try:
+            self.request.release()
+        except Exception:
+            pass
+
         try:
             self.chip.close()
         except Exception:
             pass
 
     def _on(self):
-        self.line.set_value(1)
+        self.request.set_value(LINE_OFFSET, gpiod.line.Value.ACTIVE)
 
     def _off(self):
-        self.line.set_value(0)
+        self.request.set_value(LINE_OFFSET, gpiod.line.Value.INACTIVE)
 
-    def _calc_interval(self, postures):
+    def _calc_interval(self, postures: set[str]):
         if not postures:
             return None
 
-        weight = max([BUZZER_WEIGHT_MAP.get(p, 1.0) for p in postures])
+        weight = max(BUZZER_WEIGHT_MAP.get(p, 1.0) for p in postures)
 
         if self.stage == 1:
             base = BUZZER_STAGE1_INTERVAL
@@ -70,32 +79,34 @@ class BuzzerFeedback:
         count_factor = 1 + (len(postures) - 1) * BUZZER_MULTI_POSTURE_FACTOR
         return base / (weight * count_factor)
 
-    def _update_stage(self, elapsed):
-        if elapsed >= 15:
+    def _update_stage(self, elapsed_sec: float):
+        if elapsed_sec >= 15:
             self.stage = 3
-        elif elapsed >= 10:
+        elif elapsed_sec >= 10:
             self.stage = 2
-        elif elapsed >= BUZZER_INITIAL_DELAY_SEC:
+        elif elapsed_sec >= BUZZER_INITIAL_DELAY_SEC:
             self.stage = 1
         else:
             self.stage = 0
 
-    def update(self, active_postures: set):
+    def update(self, active_postures: set[str]):
         if not BUZZER_ENABLE:
             return
 
         now = time.time()
 
+        # 정상 자세면 즉시 리셋
         if not active_postures:
             self.reset()
             return
 
+        # 이상 자세 종류가 바뀌면 카운터 리셋
         if active_postures != self.current_postures:
-            print(f"[BUZZER] posture changed -> reset | {active_postures}")
-            self.current_postures = active_postures.copy()
+            print(f"[BUZZER] posture changed -> reset | {sorted(active_postures)}")
+            self.current_postures = set(active_postures)
             self.first_detect_time = now
+            self.last_beep_time = 0.0
             self.stage = 0
-            self.last_beep_time = 0
             self._off()
             return
 
@@ -103,8 +114,8 @@ class BuzzerFeedback:
             self.first_detect_time = now
             return
 
-        elapsed = now - self.first_detect_time
-        self._update_stage(elapsed)
+        elapsed_sec = now - self.first_detect_time
+        self._update_stage(elapsed_sec)
 
         if self.stage == 0:
             self._off()
