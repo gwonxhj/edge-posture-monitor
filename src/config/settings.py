@@ -4,7 +4,7 @@ import os
 # -----------------------------
 # UART / Runtime
 # -----------------------------
-UART_PORT = os.getenv("POSTURE_UART_PORT", "/dev/ttyAMA0")
+UART_PORT = os.getenv("POSTURE_UART_PORT", "/dev/ttyAMA3")
 UART_BAUD = int(os.getenv("POSTURE_UART_BAUD", "921600"))
 UART_MOCK_MODE = os.getenv("POSTURE_UART_MOCK", "0") == "1"
 
@@ -37,8 +37,6 @@ ENABLE_SAMPLE_LOGGER = os.getenv("POSTURE_ENABLE_SAMPLE_LOGGER", "1") == "1"
 # Report / Future extension
 # -----------------------------
 REPORT_ENGINE = os.getenv("POSTURE_REPORT_ENGINE", "rule")
-LLM_REPORT_MODE = os.getenv("POSTURE_LLM_REPORT_MODE", "mock")
-
 LLM_REPORT_MODE = os.getenv("POSTURE_LLM_REPORT_MODE", "mock")
 LLM_MODEL_BACKEND = os.getenv("POSTURE_LLM_MODEL_BACKEND", "llama_cpp")
 LLM_GGUF_MODEL_PATH = os.getenv("POSTURE_LLM_GGUF_MODEL_PATH", "")
