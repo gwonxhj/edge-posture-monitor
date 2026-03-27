@@ -22,6 +22,7 @@ from src.core.posture_flags import detect_posture_flags
 from src.core.posture_mapper import to_display_label
 
 from src.sensor.sensor_mapper import map_raw_packet
+from src.core.sensor_factor import apply_sensor_factors
 
 from src.app_flow.sit_detector import wait_until_sit_detected
 from src.app_flow.app_flow_controller import wait_for_restart_decision
@@ -199,6 +200,8 @@ def run_measurement_loop(
             raw_packet = receiver.read_sensor_packet()
             if raw_packet is None:
                 continue
+
+            raw_packet = apply_sensor_factors(raw_packet)
 
             if (
                 receiver.checksum_fail_count > 0

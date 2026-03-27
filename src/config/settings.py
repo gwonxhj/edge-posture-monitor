@@ -93,3 +93,35 @@ BUZZER_WEIGHT_MAP = {
     "thinking_pose": 1.05,
     "reclined": 1.1,
 }
+
+# -----------------------------
+# Sensor Factor Settings
+# -----------------------------
+FACTOR_ENABLE = os.getenv("POSTURE_FACTOR_ENABLE", "1") == "1"
+
+LOADCELL_FACTORS = {
+    "back_right_top": 1.0,
+    "back_right_upper_mid": 1.0,
+    "back_right_lower_mid": 1.0,
+    "back_right_bottom": 1.0,
+    "back_left_top": 1.0,
+    "back_left_upper_mid": 1.0,
+    "back_left_lower_mid": 1.0,
+    "back_left_bottom": 1.0,
+    "seat_rear_right": 1.0,
+    "seat_front_right": 1.0,
+    "seat_rear_left": 1.0,
+    "seat_front_left": 1.0,
+}
+
+TOF_1D_FACTORS = {
+    "spine_upper": 1.0,
+    "spine_upper_mid": 1.0,
+    "spine_lower_mid": 1.0,
+    "spine_lower": 1.0,
+}
+
+TOF_3D_FACTORS = {
+    "left_sensor": 1.0,
+    "right_sensor": 1.0,
+}
