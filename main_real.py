@@ -172,7 +172,7 @@ def run_uart_handshake(receiver, sender, ready_msg, link_ok_msg):
         sender.send_ack()
 
         start_ts = time.time()
-        while time.time() - start_ts < 0.5:
+        while time.time() - start_ts < 1.0:
             msg = receiver.read_control_message()
             if msg is None:
                 continue
