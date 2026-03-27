@@ -162,11 +162,11 @@ def run_uart_handshake(receiver, sender, ready_msg, link_ok_msg):
             time.sleep(HANDSHAKE_AFTER_READY_DELAY_SEC)
 
         # READY 반복 송신으로 RX 버퍼에 남아 있을 수 있는 stale 데이터 정리
-        try:
-            receiver.ser.reset_input_buffer()
-            print("[UART] RX buffer flushed before ACK")
-        except Exception as e:
-            print(f"[UART] RX buffer flush skipped: {e}")
+        #try:
+        #    receiver.ser.reset_input_buffer()
+        #    print("[UART] RX buffer flushed before ACK")
+        #except Exception as e:
+        #    print(f"[UART] RX buffer flush skipped: {e}")
 
         print(f"[UART] ACK 전송 시도 {ack_retry}/{max_ack_retry}")
         sender.send_ack()
