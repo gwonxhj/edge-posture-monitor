@@ -26,14 +26,13 @@ from src.sensor.sensor_mapper import map_raw_packet
 from src.app_flow.sit_detector import wait_until_sit_detected
 from src.app_flow.app_flow_controller import wait_for_restart_decision
 
-from src.feedback.buzzer_feedback import BuzzerFeedback
-
 from src.config.settings import (
     DEBUG_FEATURES,
     DEBUG_FLAGS,
     DEBUG_SENSOR_RAW,
     DEBUG_SUMMARY_EVERY_N,
     SIT_TO_NEXT_CMD_DELAY_SEC,
+    BUZZER_ENABLE,
 )
 
 
@@ -87,7 +86,10 @@ def run_measurement_loop(
 ):
     print("\n=== 실시간 측정 시작 ===")
 
-    buzzer = BuzzerFeedback()
+    buzzer = None
+    if BUZZER_ENABLE:
+        from src.feedback.buzzer_feedback import BuzzerFeedback
+        buzzer = BuzzerFeedback()
 
     try:
         score_sum = runtime_context.get("score_sum", 0.0)
@@ -114,7 +116,8 @@ def run_measurement_loop(
                 if result["action"] == "pause_measurement":
                     print("앱에서 측정 일시정지 요청이 들어와서 STM32로 STOP 전송")
                     sender.send_stop()
-                    buzzer.reset()
+                    if buzzer:
+                        buzzer.reset()
                     app_server.update_meta({
                         "stage": S.PAUSED,
                     })
@@ -129,7 +132,8 @@ def run_measurement_loop(
                 if result["action"] == "quit_measurement":
                     print("앱에서 측정 종료 요청이 들어와서 STM32로 STOP 전송")
                     sender.send_stop()
-                    buzzer.reset()
+                    if buzzer:
+                        buzzer.reset()
                     return {
                         "result": "quit",
                         "score_sum": score_sum,
@@ -140,7 +144,8 @@ def run_measurement_loop(
 
                 if result["action"] == "start_calibration":
                     sender.send_stop()
-                    buzzer.reset()
+                    if buzzer:
+                        buzzer.reset()
 
                     wait_until_sit_detected(receiver, sender)
 
@@ -216,7 +221,8 @@ def run_measurement_loop(
             if raw_packet.get("frame_type") == "EVENT":
                 if raw_packet.get("event") == "STAND":
                     print("[UART] STAND 이벤트 감지")
-                    buzzer.reset()
+                    if buzzer:
+                        buzzer.reset()
 
                     stand_payload = build_stand_event_payload(
                         user_id=current_profile["user_id"]
@@ -236,7 +242,8 @@ def run_measurement_loop(
 
                     if decision == "decline_resume_after_stand":
                         print("사용자가 재시작을 거부하여 측정을 종료함.")
-                        buzzer.reset()
+                        if buzzer:
+                            buzzer.reset()
                         return {
                             "result": "stand_declined",
                             "score_sum": score_sum,
@@ -247,7 +254,8 @@ def run_measurement_loop(
 
                     if decision == "quit_measurement":
                         print("STAND 이후 사용자가 측정 종료를 요청함.")
-                        buzzer.reset()
+                        if buzzer:
+                            buzzer.reset()
                         return {
                             "result": "quit",
                             "score_sum": score_sum,
@@ -432,7 +440,8 @@ def run_measurement_loop(
 
             # normal 은 부저 활성 자세 목록에서 제외
             active_bad_postures = {k for k, v in flags.items() if v and k != "normal"}
-            buzzer.update(active_bad_postures)
+            if buzzer:
+                buzzer.update(active_bad_postures)
 
             if DEBUG_FLAGS and sample_index % DEBUG_SUMMARY_EVERY_N == 0:
                 print(
@@ -484,4 +493,5 @@ def run_measurement_loop(
             )
 
     finally:
-        buzzer.close()
+        if buzzer:
+            buzzer.close()

@@ -62,7 +62,7 @@ CLASSIFIER_FALLBACK_TO_RULE = True
 # Buzzer Feedback Settings
 # -----------------------------
 
-BUZZER_ENABLE = os.getenv("POSTURE_BUZZER_ENABLE", "1") == "1"
+BUZZER_ENABLE = os.getenv("POSTURE_BUZZER_ENABLE", "0") == "1"
 
 # 최초 감지 후 알람 시작까지 대기 시간 (초)
 BUZZER_INITIAL_DELAY_SEC = float(
