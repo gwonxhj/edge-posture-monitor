@@ -1,5 +1,7 @@
 from collections import defaultdict
 
+from src.core.sensor_factor import apply_sensor_factors
+
 
 class CalibrationManager:
     def __init__(self, sample_rate_hz=50):
@@ -56,6 +58,8 @@ class CalibrationManager:
 
             if raw_packet.get("frame_type") != "CAL":
                 continue
+
+            raw_packet = apply_sensor_factors(raw_packet)
 
             semantic_packet = mapper_func(raw_packet)
             extracted = feature_extractor_func(semantic_packet, baseline=None)
