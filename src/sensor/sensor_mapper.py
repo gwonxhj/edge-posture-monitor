@@ -26,11 +26,59 @@ from src.communication.uart_protocol import (
     IDX_MPU_LEFT,
 )
 
+HEAD_VALID_MIN_MM = 80
+HEAD_VALID_MAX_MM = 1200
+
+SPINE_VALID_MIN_MM = 30
+SPINE_VALID_MAX_MM = 1200
+
+EMA_ALPHA_SPINE = 0.25
+EMA_ALPHA_HEAD = 0.20
+
+_PREV_SPINE = {
+    "upper": None,
+    "upper_mid": None,
+    "lower_mid": None,
+    "lower": None,
+}
+
+_PREV_HEAD = {
+    "left_mean": None,
+    "right_mean": None,
+    "mean": None,
+}
+
 
 def _safe_mean(values):
     if not values:
         return 0.0
     return sum(values) / len(values)
+
+
+def _ema(prev_value, new_value, alpha):
+    if prev_value is None:
+        return float(new_value)
+    return (alpha * float(new_value)) + ((1.0 - alpha) * float(prev_value))
+
+
+def _is_valid_mm(value, low, high):
+    try:
+        v = float(value)
+    except Exception:
+        return False
+    return low <= v <= high
+
+
+def _sanitize_spine_value(key, value):
+    prev = _PREV_SPINE.get(key)
+
+    if _is_valid_mm(value, SPINE_VALID_MIN_MM, SPINE_VALID_MAX_MM):
+        smoothed = _ema(prev, float(value), EMA_ALPHA_SPINE)
+    else:
+        smoothed = prev if prev is not None else 0.0
+
+    _PREV_SPINE[key] = smoothed
+    return round(smoothed, 3)
 
 
 def _build_head_summary(tof_3d):
@@ -41,22 +89,54 @@ def _build_head_summary(tof_3d):
     - tof_3d[0:16]   : 착석 기준 우측 목 센서 4x4
     - tof_3d[16:32]  : 착석 기준 좌측 목 센서 4x4
     """
-    right_half = tof_3d[:16]
-    left_half = tof_3d[16:]
+    right_half_raw = tof_3d[:16]
+    left_half_raw = tof_3d[16:]
 
-    left_mean = _safe_mean(left_half)
-    right_mean = _safe_mean(right_half)
-    mean_all = _safe_mean(tof_3d)
-    min_all = min(tof_3d) if tof_3d else 0.0
-    max_all = max(tof_3d) if tof_3d else 0.0
+    right_half = [
+        float(v) for v in right_half_raw
+        if _is_valid_mm(v, HEAD_VALID_MIN_MM, HEAD_VALID_MAX_MM)
+    ]
+    left_half = [
+        float(v) for v in left_half_raw
+        if _is_valid_mm(v, HEAD_VALID_MIN_MM, HEAD_VALID_MAX_MM)
+    ]
+    valid_all = right_half + left_half
+
+    raw_right_mean = _safe_mean(right_half)
+    raw_left_mean = _safe_mean(left_half)
+
+    if raw_right_mean > 0:
+        right_mean = _ema(_PREV_HEAD["right_mean"], raw_right_mean, EMA_ALPHA_HEAD)
+    else:
+        right_mean = _PREV_HEAD["right_mean"] if _PREV_HEAD["right_mean"] is not None else 0.0
+
+    if raw_left_mean > 0:
+        left_mean = _ema(_PREV_HEAD["left_mean"], raw_left_mean, EMA_ALPHA_HEAD)
+    else:
+        left_mean = _PREV_HEAD["left_mean"] if _PREV_HEAD["left_mean"] is not None else 0.0
+
+    nonzero_means = [v for v in [left_mean, right_mean] if v > 0]
+    mean_all_raw = _safe_mean(nonzero_means) if nonzero_means else 0.0
+
+    if mean_all_raw > 0:
+        mean_all = _ema(_PREV_HEAD["mean"], mean_all_raw, EMA_ALPHA_HEAD)
+    else:
+        mean_all = _PREV_HEAD["mean"] if _PREV_HEAD["mean"] is not None else 0.0
+
+    _PREV_HEAD["left_mean"] = left_mean
+    _PREV_HEAD["right_mean"] = right_mean
+    _PREV_HEAD["mean"] = mean_all
+
+    min_all = min(valid_all) if valid_all else 0.0
+    max_all = max(valid_all) if valid_all else 0.0
 
     return {
-        "mean": mean_all,
-        "min": min_all,
-        "max": max_all,
-        "left_mean": left_mean,
-        "right_mean": right_mean,
-        "lr_diff": abs(left_mean - right_mean),
+        "mean": round(mean_all, 3),
+        "min": round(min_all, 3),
+        "max": round(max_all, 3),
+        "left_mean": round(left_mean, 3),
+        "right_mean": round(right_mean, 3),
+        "lr_diff": round(abs(left_mean - right_mean), 3),
     }
 
 
@@ -87,12 +167,16 @@ def map_raw_packet(raw_packet):
     if len(mpu) != 2:
         raise ValueError(f"Expected 2 MPU values, got {len(mpu)}")
 
+    spine_upper = _sanitize_spine_value("upper", tof_1d[IDX_SPINE_UPPER])
+    spine_upper_mid = _sanitize_spine_value("upper_mid", tof_1d[IDX_SPINE_UPPER_MID])
+    spine_lower_mid = _sanitize_spine_value("lower_mid", tof_1d[IDX_SPINE_LOWER_MID])
+    spine_lower = _sanitize_spine_value("lower", tof_1d[IDX_SPINE_LOWER])
+
     head_summary = _build_head_summary(tof_3d)
 
     semantic_packet = {
         "frame_type": raw_packet["frame_type"],
         "timestamp_ms": raw_packet["received_at_ms"],
-
         "loadcell": {
             "back_right": {
                 "top": loadcell[IDX_BACK_RIGHT_TOP],
@@ -115,20 +199,17 @@ def map_raw_packet(raw_packet):
                 "front": loadcell[IDX_SEAT_FRONT_LEFT],
             },
         },
-
         "tof": {
             "spine": {
-                "upper": tof_1d[IDX_SPINE_UPPER],
-                "upper_mid": tof_1d[IDX_SPINE_UPPER_MID],
-                "lower_mid": tof_1d[IDX_SPINE_LOWER_MID],
-                "lower": tof_1d[IDX_SPINE_LOWER],
+                "upper": spine_upper,
+                "upper_mid": spine_upper_mid,
+                "lower_mid": spine_lower_mid,
+                "lower": spine_lower,
             },
             "head_raw": tof_3d,
             "head_summary": head_summary,
         },
-
         "imu": {
-            # 두 MPU6050 pitch 평균값을 대표 pitch로 사용
             "right_pitch_deg": mpu[IDX_MPU_RIGHT],
             "left_pitch_deg": mpu[IDX_MPU_LEFT],
             "pitch_fused_deg": (mpu[IDX_MPU_RIGHT] + mpu[IDX_MPU_LEFT]) / 2.0,
