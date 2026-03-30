@@ -5,6 +5,7 @@ Realtime measurement runtime loop.
 앱 command 처리, 자세 분석 및 리포트 누적을 담당한다.
 """
 import time
+import json
 
 from src.communication import session_state as S
 from src.communication.app_payload_builder import (
@@ -34,37 +35,52 @@ from src.config.settings import (
     DEBUG_SUMMARY_EVERY_N,
     SIT_TO_NEXT_CMD_DELAY_SEC,
     BUZZER_ENABLE,
+    DEBUG_SENSOR_DISTRIBUTION,
 )
 
 
 def select_report_posture(predicted, flags, feature_map=None):
     """
-    다중 flag 중 리포트용 대표 자세 1개를 선택한다.
-    forward_lean 과 turtle_neck 이 동시에 켜질 수 있으므로
-    좌판 전방 쏠림이 뚜렷하면 forward_lean을 우선한다.
+    리포트/집계용 posture 선택 규칙
+
+    우선순위:
+    1. normal flag가 켜져 있으면 무조건 normal
+    2. 강한 rule posture는 classifier보다 우선
+    3. rule 기반 자세가 없으면 classifier 결과 사용
     """
     feature_map = feature_map or {}
-    seat_fb_shift = feature_map.get("seat_fb_shift", 0.0)
-    pitch_fused_deg = feature_map.get("pitch_fused_deg", 0.0)
 
-    if flags.get("forward_lean") and (
-        seat_fb_shift > 0.16 or pitch_fused_deg > 5.0
-    ):
+    seat_fb_shift = feature_map.get("seat_fb_shift", 0.0)
+    pitch = feature_map.get("pitch_fused_deg", 0.0)
+    neck_forward = feature_map.get("neck_forward_delta", 0.0)
+
+    # 1) normal 우선
+    if flags.get("normal", False):
+        return "normal"
+
+    # 2) 강한 override
+    if flags.get("forward_lean") and (seat_fb_shift > 0.35 or pitch > 8.0):
         return "forward_lean"
 
-    priority = [
-        "turtle_neck",
-        "thinking_pose",
-        "perching",
-        "side_slouch",
-        "reclined",
-        "leg_cross_suspect",
-    ]
+    if flags.get("turtle_neck") and neck_forward > 55:
+        return "turtle_neck"
 
-    for posture in priority:
-        if flags.get(posture):
-            return posture
+    if flags.get("reclined"):
+        return "reclined"
 
+    if flags.get("side_slouch"):
+        return "side_slouch"
+
+    if flags.get("perching"):
+        return "perching"
+
+    if flags.get("thinking_pose"):
+        return "thinking_pose"
+
+    if flags.get("leg_cross_suspect"):
+        return "leg_cross_suspect"
+
+    # 3) fallback
     return predicted
 
 
@@ -180,6 +196,15 @@ def run_measurement_loop(
 
                     session_manager.save_baseline_for_current_user(new_baseline)
                     baseline = new_baseline
+
+                    # 🔥 baseline sanity check
+                    if baseline.get("neck_mean", 0) < 100:
+                        print("[WARN] baseline neck_mean too low → fallback correction")
+                        baseline["neck_mean"] = 200.0
+
+                    if abs(baseline.get("spine_curve", 0)) > 100:
+                        print("[WARN] baseline spine_curve abnormal → reset")
+                        baseline["spine_curve"] = 0.0
 
                     app_server.update_meta({
                         "stage": S.MEASURING,
@@ -421,23 +446,29 @@ def run_measurement_loop(
 
             realtime_payload = build_realtime_payload(
                 user_id=current_profile["user_id"],
-                posture=predicted,
+                posture=report_posture,
                 flags=flags,
                 state=state,
                 monitoring_metrics=metrics,
             )
             app_server.update_status(realtime_payload)
 
-            if sample_index % 10 == 0:
-                distribution_payload = build_sensor_distribution_payload(
-                    user_id=current_profile["user_id"],
-                    session_id=session_id,
-                    sample_index=sample_index,
-                    raw_packet=raw_packet,
-                    feature_map=feature_map,
-                    semantic_packet=semantic_packet,
-                )
-                app_server.update_status(distribution_payload)
+            # 🔥 압력 분포 항상 전송 (디버깅 안정화 단계)
+            distribution_payload = build_sensor_distribution_payload(
+                user_id=current_profile["user_id"],
+                session_id=session_id,
+                sample_index=sample_index,
+                raw_packet=raw_packet,
+                feature_map=feature_map,
+                semantic_packet=semantic_packet,
+            )
+
+            app_server.update_status(distribution_payload)
+
+            # 선택 로그
+            if DEBUG_SENSOR_DISTRIBUTION and sample_index % DEBUG_SUMMARY_EVERY_N == 0:
+                print("[SENSOR DISTRIBUTION]")
+                print(json.dumps(distribution_payload, indent=2, ensure_ascii=False))
 
             active_flags = [k for k, v in flags.items() if v]
 
