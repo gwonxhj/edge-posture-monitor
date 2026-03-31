@@ -40,10 +40,17 @@ def run_calibration_flow(
 
     sender.send_cal()
 
+    # ✅ 여기 추가 (핵심)
+    def calibration_pipeline(packet):
+        mapped = map_raw_packet(packet)
+        factored = apply_sensor_factors(mapped)
+        features = extract_features(factored)
+        return features
+
     baseline = calibration_manager.run_calibration_loop(
         receiver=receiver,
-        mapper_func=map_raw_packet,
-        feature_extractor_func=extract_features,
+        mapper_func=lambda packet: packet,   # mapper 우회
+        feature_extractor_func=calibration_pipeline,
         duration_sec=10,
         verbose=True,
     )
