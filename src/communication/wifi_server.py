@@ -27,23 +27,6 @@ class AppCommandQueue:
 class WiFiServer:
     """
     앱 <-> RPi 통신 서버
-
-    지원:
-    - POST /command
-    - GET  /meta
-    - GET  /status
-    - GET  /report
-    - GET  /health
-    - WS   /ws
-
-    기존 main_real.py 호환 메서드:
-    - start()
-    - stop()
-    - get_next_command()
-    - update_status(payload)
-    - update_report(payload)
-    - update_meta(payload)
-    - on_control_write(raw_json)
     """
 
     def __init__(self, host: str = "0.0.0.0", port: int = 8000):
@@ -140,8 +123,8 @@ class WiFiServer:
 
         @self._app.post("/command")
         async def post_command(cmd: dict):
-            # 최소 구조 검증
             if not isinstance(cmd, dict):
+                print("[APP -> RPi] invalid_json_object:", cmd)
                 return JSONResponse(
                     status_code=400,
                     content={
@@ -153,6 +136,7 @@ class WiFiServer:
                 )
 
             if "cmd" not in cmd:
+                print("[APP -> RPi] missing_cmd:", cmd)
                 return JSONResponse(
                     status_code=400,
                     content={
@@ -163,8 +147,12 @@ class WiFiServer:
                     },
                 )
 
+            print(
+                "[APP -> RPi] command received | "
+                f"stage={server_ref.latest_meta_payload.get('stage')} | payload={json.dumps(cmd, ensure_ascii=False)}"
+            )
+
             server_ref.command_queue.put(cmd)
-            print("[WIFI] RX command:", cmd)
 
             return {
                 "ok": True,
@@ -181,12 +169,9 @@ class WiFiServer:
             print("[WIFI][WS] client connected")
 
             try:
-                # reconnect 시 현재 스냅샷 즉시 전달
                 await server_ref._send_snapshot_to_client(ws)
 
                 while True:
-                    # 현재는 앱->RPi 웹소켓 명령은 미사용
-                    # ping/keepalive/future 확장 용도
                     _ = await ws.receive_text()
 
             except WebSocketDisconnect:
@@ -229,7 +214,10 @@ class WiFiServer:
         print("[WIFI] server stopped")
 
     def get_next_command(self):
-        return self.command_queue.get_nowait()
+        cmd = self.command_queue.get_nowait()
+        if cmd is not None:
+            print(f"[RPi CMD QUEUE] pop -> {json.dumps(cmd, ensure_ascii=False)}")
+        return cmd
 
     def update_status(self, payload: dict):
         payload = dict(payload)
@@ -281,9 +269,6 @@ class WiFiServer:
         self._enqueue_broadcast(self.latest_meta_payload)
 
     def on_control_write(self, raw_json: str):
-        """
-        콘솔 fallback 호환용
-        """
         try:
             cmd = json.loads(raw_json)
             self.command_queue.put(cmd)
@@ -295,13 +280,6 @@ class WiFiServer:
     # internal
     # -------------------------------------------------
     async def _send_snapshot_to_client(self, ws: WebSocket):
-        """
-        새로 붙은 클라이언트에게 현재 상태를 즉시 복구용으로 전송
-        순서:
-        1) meta
-        2) latest status
-        3) latest report
-        """
         if self.latest_meta_payload:
             await ws.send_json(self.latest_meta_payload)
 

@@ -10,13 +10,25 @@ POSTURE_BASE_WEIGHT = {
 }
 
 POSTURE_ALERT_THRESHOLD_SEC = {
-    "turtle_neck": 20,
-    "forward_lean": 20,
-    "reclined": 30,
-    "side_slouch": 15,
-    "leg_cross_suspect": 30,
-    "thinking_pose": 15,
-    "perching": 12,
+    "turtle_neck": 10,
+    "forward_lean": 10,
+    "reclined": 15,
+    "side_slouch": 8,
+    "leg_cross_suspect": 15,
+    "thinking_pose": 10,
+    "perching": 8,
+}
+
+# 이상 자세가 유지될 때 초당 기본 차감량
+POSTURE_DECAY_PER_SEC = {
+    "normal": 0.0,
+    "turtle_neck": 0.25,
+    "forward_lean": 0.30,
+    "reclined": 0.12,
+    "side_slouch": 0.30,
+    "leg_cross_suspect": 0.10,
+    "thinking_pose": 0.15,
+    "perching": 0.35,
 }
 
 
@@ -52,10 +64,10 @@ class PostureScoreEngine:
         if self.alert_stage <= 1:
             return 0.0
         if self.alert_stage == 2:
-            return 0.1
+            return 0.15
         if self.alert_stage == 3:
-            return 0.1
-        return 0.2
+            return 0.20
+        return 0.25
 
     def update(self, posture, flags=None, step_samples=1):
         self.total_sitting_samples += step_samples
@@ -76,30 +88,45 @@ class PostureScoreEngine:
         alert = False
         penalty_applied = 0.0
 
+        # 0) 정자세 유지 시 점수 회복 (초당 +0.05, 최대 100)
+        if posture == "normal" and self.score < 100.0:
+            recovery = 0.05 * (step_samples / self.sample_rate_hz)
+            self.score = min(100.0, self.score + recovery)
+
+        # 1) 이상 자세일 때는 매 샘플마다 소량 감점
         if posture != "normal":
+            per_sec = POSTURE_DECAY_PER_SEC.get(posture, 0.0)
+            continuous_penalty = per_sec * (step_samples / self.sample_rate_hz)
+            penalty_applied += continuous_penalty
+            self.score -= continuous_penalty
+
             threshold_samples = int(
                 POSTURE_ALERT_THRESHOLD_SEC.get(posture, 20) * self.sample_rate_hz
             )
-
             recheck_samples = int(10 * self.sample_rate_hz)
 
+            # 2) 최초 임계 지속 시간 도달 시 1차 알림 + 기본 패널티
             if self.current_posture_samples >= threshold_samples and self.alert_stage == 0:
-                # 1차 알림
                 self.alert_stage = 1
                 self.last_alert_sample = self.current_posture_samples
+                first_penalty = POSTURE_BASE_WEIGHT.get(posture, 0.0)
+                penalty_applied += first_penalty
+                self.score -= first_penalty
                 alert = True
 
-            elif self.alert_stage >= 1 and \
-                 (self.current_posture_samples - self.last_alert_sample) >= recheck_samples:
-                # 미개선 재알림 + penalty 증가
+            # 3) 이후 10초마다 재알림 + 추가 패널티
+            elif self.alert_stage >= 1 and (
+                self.current_posture_samples - self.last_alert_sample
+            ) >= recheck_samples:
                 self.alert_stage += 1
                 self.last_alert_sample = self.current_posture_samples
                 extra = self._next_extra_penalty()
-                penalty_applied = POSTURE_BASE_WEIGHT.get(posture, 0.0) + extra
-                self.score -= penalty_applied
-                if self.score < 0:
-                    self.score = 0.0
+                penalty_applied += extra
+                self.score -= extra
                 alert = True
+
+        if self.score < 0:
+            self.score = 0.0
 
         posture_duration_sec = {
             k: self._samples_to_sec(v)
@@ -113,7 +140,7 @@ class PostureScoreEngine:
             "total_sitting_sec": round(self._samples_to_sec(self.total_sitting_samples), 2),
             "alert": alert,
             "alert_stage": self.alert_stage,
-            "penalty_applied": round(penalty_applied, 2),
+            "penalty_applied": round(penalty_applied, 3),
             "posture_duration_sec": posture_duration_sec,
             "flags": flags or {},
         }

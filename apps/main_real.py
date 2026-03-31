@@ -1,4 +1,5 @@
 import os
+import time
 
 from src.sensor.sensor_receiver import SensorReceiver
 
@@ -20,8 +21,6 @@ from src.session.session_manager import SessionManager
 
 from src.storage.database_manager import DatabaseManager
 from src.storage.sample_logger import SampleLogger
-
-from src.feedback.audio_feedback import AudioFeedback
 
 from src.report.report_generator import ReportGenerator
 from src.report.report_service import ReportService
@@ -46,8 +45,9 @@ from src.config.settings import (
     UART_MOCK_MODE,
     SAMPLE_RATE_HZ,
     ENABLE_SAMPLE_LOGGER,
+    HANDSHAKE_AFTER_READY_DELAY_SEC,
+    SIT_TO_NEXT_CMD_DELAY_SEC,
 )
-
 
 
 def finalize_and_save_session(
@@ -142,6 +142,52 @@ def finalize_and_save_session(
 
     print(f"\n세션 저장 완료: session_id={session_id}, end_reason={end_reason}")
 
+def run_uart_handshake(receiver, sender, ready_msg, link_ok_msg):
+    print("=== UART Handshake 시작 ===")
+
+    # 1) READY 올 때까지 대기
+    receiver.wait_for_message(ready_msg, verbose=True)
+
+    # 2) READY를 본 뒤 ACK 재시도 + LINK_OK 확인
+    ack_retry = 0
+    max_ack_retry = 20
+
+    while ack_retry < max_ack_retry:
+        ack_retry += 1
+
+        if HANDSHAKE_AFTER_READY_DELAY_SEC > 0:
+            print(f"[UART] READY 수신 후 {HANDSHAKE_AFTER_READY_DELAY_SEC:.3f}s 대기")
+            time.sleep(HANDSHAKE_AFTER_READY_DELAY_SEC)
+
+        # READY 반복 송신으로 RX 버퍼에 남아 있을 수 있는 stale 데이터 정리
+        #try:
+        #    receiver.ser.reset_input_buffer()
+        #    print("[UART] RX buffer flushed before ACK")
+        #except Exception as e:
+        #    print(f"[UART] RX buffer flush skipped: {e}")
+
+        print(f"[UART] ACK 전송 시도 {ack_retry}/{max_ack_retry}")
+        sender.send_ack()
+
+        start_ts = time.time()
+        while time.time() - start_ts < 1.0:
+            msg = receiver.read_control_message()
+            if msg is None:
+                continue
+
+            print(f"[UART] RX: {msg}")
+
+            if msg == link_ok_msg:
+                print("=== UART 연결 완료 ===")
+                return True
+
+            # READY가 또 오면 STM32가 아직 handshake 중인 것으로 보고
+            # 다음 루프에서 ACK 재전송
+            if msg == ready_msg:
+                print("[UART] READY 재수신 -> ACK 재전송 예정")
+                break
+
+    raise RuntimeError("UART handshake failed: LINK_OK not received")
 
 def main():
     uart_port = UART_PORT
@@ -174,7 +220,6 @@ def main():
 
     classifier = PostureClassifier()
     score_engine = PostureScoreEngine(sample_rate_hz=SAMPLE_RATE_HZ)
-    audio = AudioFeedback()
     report_gen = ReportGenerator()
 
     runtime_context = {
@@ -185,11 +230,12 @@ def main():
     }
 
     try:
-        print("=== UART Handshake 시작 ===")
-        receiver.wait_for_message(MSG_READY, verbose=True)
-        sender.send_ack()
-        receiver.wait_for_message(MSG_LINK_OK, verbose=True)
-        print("=== UART 연결 완료 ===")
+        run_uart_handshake(
+            receiver=receiver,
+            sender=sender,
+            ready_msg=MSG_READY,
+            link_ok_msg=MSG_LINK_OK,
+        )
 
         app_server.update_meta({
             "stage": S.UART_LINK_READY,
@@ -199,6 +245,7 @@ def main():
             app_server=app_server,
             session_manager=session_manager,
             db_manager=db_manager,
+            sender=sender,
         )
 
         session_manager.start_session()
@@ -219,6 +266,7 @@ def main():
                 app_server=app_server,
                 session_manager=session_manager,
                 db_manager=db_manager,
+                sender=sender,
             )
 
         if decision == "start_calibration":
@@ -243,6 +291,7 @@ def main():
             app_server=app_server,
             session_manager=session_manager,
             db_manager=db_manager,
+            sender=sender,
         )
 
         if decision == "cancel":
@@ -260,6 +309,10 @@ def main():
 
         wait_until_sit_detected(receiver, sender)
 
+        if SIT_TO_NEXT_CMD_DELAY_SEC > 0:
+            print(f"[RPi] SIT 확인 후 {SIT_TO_NEXT_CMD_DELAY_SEC:.3f}s 대기")
+            time.sleep(SIT_TO_NEXT_CMD_DELAY_SEC)
+
         print("측정 시작 명령 전송")
         sender.send_go()
         session_manager.mark_measurement_started()
@@ -270,6 +323,9 @@ def main():
 
         current_profile = session_manager.get_current_profile()
         baseline = session_manager.get_current_baseline()
+
+        print(f"[DB CHECK] creating session for user_id={current_profile['user_id']}")
+
         session_id = db_manager.create_session(current_profile["user_id"])
 
         sample_logger.start_session_log(
@@ -289,7 +345,6 @@ def main():
                 session_manager=session_manager,
                 db_manager=db_manager,
                 report_gen=report_gen,
-                audio=audio,
                 current_profile=current_profile,
                 baseline=baseline,
                 session_id=session_id,
@@ -307,6 +362,7 @@ def main():
                     app_server=app_server,
                     session_manager=session_manager,
                     db_manager=db_manager,
+                    sender=sender,
                 )
 
                 if decision == "resume":
@@ -315,6 +371,11 @@ def main():
                         "stage": S.WAIT_SIT_FOR_MEASURE,
                     })
                     wait_until_sit_detected(receiver, sender)
+
+                    if SIT_TO_NEXT_CMD_DELAY_SEC > 0:
+                        print(f"[RPi] SIT 확인 후 {SIT_TO_NEXT_CMD_DELAY_SEC:.3f}s 대기")
+                        time.sleep(SIT_TO_NEXT_CMD_DELAY_SEC)
+
                     sender.send_go()
 
                     baseline = session_manager.get_current_baseline()
@@ -341,6 +402,7 @@ def main():
                         app_server=app_server,
                         session_manager=session_manager,
                         db_manager=db_manager,
+                        sender=sender,
                     )
 
                     if decision == "cancel":
@@ -355,6 +417,11 @@ def main():
                     })
 
                     wait_until_sit_detected(receiver, sender)
+
+                    if SIT_TO_NEXT_CMD_DELAY_SEC > 0:
+                        print(f"[RPi] SIT 확인 후 {SIT_TO_NEXT_CMD_DELAY_SEC:.3f}s 대기")
+                        time.sleep(SIT_TO_NEXT_CMD_DELAY_SEC)
+
                     sender.send_go()
 
                     baseline = session_manager.get_current_baseline()

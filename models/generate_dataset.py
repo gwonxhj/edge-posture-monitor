@@ -1,8 +1,8 @@
 import csv
 
-from src.sensor_simulator import POSTURE_LABELS, read_mock_sensor
-from src.sensor_mapper import map_raw_packet
-from src.feature_extractor import extract_features
+from src.sensor.sensor_simulator import POSTURE_LABELS, read_mock_sensor
+from src.sensor.sensor_mapper import map_raw_packet
+from src.core.feature_extractor import extract_features
 
 
 def generate_dataset(output_path="data/posture_dataset.csv", samples_per_class=400):
@@ -11,9 +11,25 @@ def generate_dataset(output_path="data/posture_dataset.csv", samples_per_class=4
     for label in POSTURE_LABELS:
         for _ in range(samples_per_class):
             raw_packet = read_mock_sensor(posture=label)
+
+            # mock sensor output -> real mapper input 형식 보정
+            if "frame_type" not in raw_packet:
+                raw_packet["frame_type"] = "DAT"
+            if "received_at_ms" not in raw_packet:
+                raw_packet["received_at_ms"] = 0
+
             semantic_packet = map_raw_packet(raw_packet)
-            features = extract_features(semantic_packet)
-            rows.append(features + [label])
+            extracted = extract_features(semantic_packet)
+            if len(rows) == 0:
+                print("[DEBUG raw_packet]")
+                print(raw_packet)
+                print("[DEBUG semantic_packet]")
+                print(semantic_packet)
+                print("[DEBUG feature_map]")
+                print(extracted["feature_map"])
+            rows.append(extracted["features"] + [label])
+
+            
 
     header = [
         "back_lr_diff",
@@ -25,9 +41,9 @@ def generate_dataset(output_path="data/posture_dataset.csv", samples_per_class=4
         "spine_curve",
         "spine_variation",
         "neck_forward_delta",
-        "gyro_y_filt",
-        "tilt_est",
-        "motion_level",
+        "pitch_fused_deg",
+        "pitch_lr_diff_deg",
+        "imu_motion_proxy",
         "back_right_total",
         "back_left_total",
         "seat_right_total",

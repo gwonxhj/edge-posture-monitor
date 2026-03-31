@@ -5,7 +5,7 @@ import time
 SERIAL_PORT = '/dev/serial0'
 BAUD_RATE = 921600
 PACKET_SIZE = 129
-UNPACK_FORMAT = '<4s 12i 4H 32H 2h B'
+UNPACK_FORMAT = '<4s 12i 32H 4H 2h B'
 
 HEADERS = (b'DAT:', b'CAL:')
 
@@ -65,8 +65,10 @@ def receive_pure_data():
 
                 header = unpacked[0].decode('utf-8')
                 hx711 = unpacked[1:13]
-                tof1d = unpacked[13:17]
-                tof3d = unpacked[17:49]
+
+                tof3d = unpacked[13:45]   # 32개
+                tof1d = unpacked[45:49]   # 4개
+
                 mpu = unpacked[49:51]
 
                 packet_count += 1

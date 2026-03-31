@@ -11,13 +11,20 @@ def score_to_level(score):
 
 
 def similarity_score(current, baseline, danger_range):
-    """
-    baseline 대비 얼마나 벗어났는지 보고 0~100 안정도 점수 반환
-    danger_range 이상 벗어나면 0점에 가깝게 처리
-    """
     delta = abs(current - baseline)
-    score = 100 * (1 - (delta / danger_range))
-    return round(clamp(score, 0, 100), 1)
+
+    # 완전 붕괴 방지
+    if delta >= danger_range * 2:
+        return 5.0  # 완전 최악이어도 0 말고 5 유지
+
+    ratio = delta / danger_range
+
+    score = 100 * (1 - ratio)
+
+    # 🔥 soft clamp (0 안 박히게)
+    score = clamp(score, 5, 100)
+
+    return round(score, 1)
 
 
 def build_monitoring_metrics(feature_map, baseline):
@@ -65,12 +72,12 @@ def build_monitoring_metrics(feature_map, baseline):
 
     # 등판 ToF 안정도
     spine_tof_score = similarity_score(
-        spine_curve, baseline_spine_curve, danger_range=15.0
+        spine_curve, baseline_spine_curve, danger_range=150.0
     )
 
     # 목 ToF 안정도
     neck_tof_score = similarity_score(
-        neck_mean, baseline_neck_mean, danger_range=18.0
+        neck_mean, baseline_neck_mean, danger_range=300.0
     )
 
     return {

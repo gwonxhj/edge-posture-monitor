@@ -14,6 +14,7 @@ class CommandSender:
 
     def _send_line(self, msg: str):
         data = (msg + "\n").encode("utf-8")
+        print(f"[UART TX] {msg}")
         self.ser.write(data)
         self.ser.flush()
 

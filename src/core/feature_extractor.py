@@ -1,5 +1,13 @@
 # src/core/feature_extractor.py
 
+# 비율 계산 시 최소 하중 임계값 (kg)
+# total이 이 값 미만이면 노이즈로 간주하여 비율을 0으로 처리한다.
+# 이렇게 하면 하중이 없는 센서 그룹에서 노이즈에 의한 on/off 떨림이
+# back_lr_diff를 0~1로 랜덤 점프시키는 문제를 방지한다.
+BACK_MIN_TOTAL_KG = 0.5
+SEAT_MIN_TOTAL_KG = 0.5
+
+
 def extract_features(packet, baseline=None):
     loadcell = packet["loadcell"]
     tof = packet["tof"]
@@ -20,9 +28,14 @@ def extract_features(packet, baseline=None):
 
     back_right_total = br_top + br_um + br_lm + br_bottom
     back_left_total = bl_top + bl_um + bl_lm + bl_bottom
-    back_total = back_right_total + back_left_total + 1e-6
+    back_total_raw = back_right_total + back_left_total
+    back_total = back_total_raw + 1e-6
 
-    back_lr_diff = abs(back_right_total - back_left_total) / back_total
+    # total이 최소 임계값 미만이면 비율 = 0 (노이즈 영역)
+    if back_total_raw < BACK_MIN_TOTAL_KG:
+        back_lr_diff = 0.0
+    else:
+        back_lr_diff = abs(back_right_total - back_left_total) / back_total
 
     back_upper = br_top + br_um + bl_top + bl_um
     back_lower = br_lm + br_bottom + bl_lm + bl_bottom
@@ -38,15 +51,19 @@ def extract_features(packet, baseline=None):
 
     seat_right_total = sr_rear + sr_front
     seat_left_total = sl_rear + sl_front
-    seat_total = seat_right_total + seat_left_total + 1e-6
-
-    seat_lr_diff = abs(seat_right_total - seat_left_total) / seat_total
+    seat_total_raw = seat_right_total + seat_left_total
+    seat_total = seat_total_raw + 1e-6
 
     seat_front_total = sr_front + sl_front
     seat_rear_total = sr_rear + sl_rear
 
-    # front-heavy면 positive
-    seat_fb_shift = (seat_front_total - seat_rear_total) / seat_total
+    # total이 최소 임계값 미만이면 비율 = 0 (노이즈 영역)
+    if seat_total_raw < SEAT_MIN_TOTAL_KG:
+        seat_lr_diff = 0.0
+        seat_fb_shift = 0.0
+    else:
+        seat_lr_diff = abs(seat_right_total - seat_left_total) / seat_total
+        seat_fb_shift = (seat_front_total - seat_rear_total) / seat_total
 
     # -----------------------------
     # ToF: head summary (기존 neck 역할 대체)
@@ -131,6 +148,19 @@ def extract_features(packet, baseline=None):
         "seat_rear_total": seat_rear_total,
         "back_total": back_right_total + back_left_total,
         "seat_total": seat_right_total + seat_left_total,
+        # 개별 로드셀 kg (baseline 저장 → sensor_distribution percent 계산용)
+        "back_left_top_kg": bl_top,
+        "back_left_upper_mid_kg": bl_um,
+        "back_left_lower_mid_kg": bl_lm,
+        "back_left_bottom_kg": bl_bottom,
+        "back_right_top_kg": br_top,
+        "back_right_upper_mid_kg": br_um,
+        "back_right_lower_mid_kg": br_lm,
+        "back_right_bottom_kg": br_bottom,
+        "seat_rear_left_kg": sl_rear,
+        "seat_rear_right_kg": sr_rear,
+        "seat_front_left_kg": sl_front,
+        "seat_front_right_kg": sr_front,
     }
 
     delta_map = {}
