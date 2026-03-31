@@ -34,7 +34,6 @@ from src.config.settings import (
     DEBUG_SENSOR_RAW,
     DEBUG_SUMMARY_EVERY_N,
     SIT_TO_NEXT_CMD_DELAY_SEC,
-    BUZZER_ENABLE,
     DEBUG_SENSOR_DISTRIBUTION,
 )
 
@@ -93,7 +92,6 @@ def run_measurement_loop(
     session_manager,
     db_manager,
     report_gen,
-    audio,
     current_profile,
     baseline,
     session_id,
@@ -102,11 +100,6 @@ def run_measurement_loop(
     sample_logger,
 ):
     print("\n=== 실시간 측정 시작 ===")
-
-    buzzer = None
-    if BUZZER_ENABLE:
-        from src.feedback.buzzer_feedback import BuzzerFeedback
-        buzzer = BuzzerFeedback()
 
     try:
         score_sum = runtime_context.get("score_sum", 0.0)
@@ -133,8 +126,6 @@ def run_measurement_loop(
                 if result["action"] == "pause_measurement":
                     print("앱에서 측정 일시정지 요청이 들어와서 STM32로 STOP 전송")
                     sender.send_stop()
-                    if buzzer:
-                        buzzer.reset()
                     app_server.update_meta({
                         "stage": S.PAUSED,
                     })
@@ -149,8 +140,6 @@ def run_measurement_loop(
                 if result["action"] == "quit_measurement":
                     print("앱에서 측정 종료 요청이 들어와서 STM32로 STOP 전송")
                     sender.send_stop()
-                    if buzzer:
-                        buzzer.reset()
                     return {
                         "result": "quit",
                         "score_sum": score_sum,
@@ -161,8 +150,6 @@ def run_measurement_loop(
 
                 if result["action"] == "start_calibration":
                     sender.send_stop()
-                    if buzzer:
-                        buzzer.reset()
 
                     wait_until_sit_detected(receiver, sender)
 
@@ -183,9 +170,12 @@ def run_measurement_loop(
                         ),
                     })
 
+                    def _mapper_with_factors(raw_pkt):
+                        return map_raw_packet(apply_sensor_factors(raw_pkt))
+
                     new_baseline = calibration_manager.run_calibration_loop(
                         receiver=receiver,
-                        mapper_func=map_raw_packet,
+                        mapper_func=_mapper_with_factors,
                         feature_extractor_func=extract_features,
                         duration_sec=10,
                         verbose=True,
@@ -226,7 +216,15 @@ def run_measurement_loop(
             if raw_packet is None:
                 continue
 
-            raw_packet = apply_sensor_factors(raw_packet)
+            # 매 50샘플마다 loadcell 원본값 디버그 출력
+            _dat_count = runtime_context.get("_dat_debug_count", 0)
+            _lc_debug = (_dat_count % 50 == 0)
+            if _lc_debug:
+                raw_lc = raw_packet.get("loadcell", [])
+                print(f"[LOADCELL RAW] dat#{_dat_count} stm32_raw={raw_lc}")
+            runtime_context["_dat_debug_count"] = _dat_count + 1
+
+            raw_packet = apply_sensor_factors(raw_packet, debug=_lc_debug)
 
             if (
                 receiver.checksum_fail_count > 0
@@ -249,14 +247,11 @@ def run_measurement_loop(
             if raw_packet.get("frame_type") == "EVENT":
                 if raw_packet.get("event") == "STAND":
                     print("[UART] STAND 이벤트 감지")
-                    if buzzer:
-                        buzzer.reset()
 
                     stand_payload = build_stand_event_payload(
                         user_id=current_profile["user_id"]
                     )
                     app_server.update_status(stand_payload)
-
                     app_server.update_meta({
                         "stage": S.WAIT_RESTART_DECISION,
                     })
@@ -270,8 +265,6 @@ def run_measurement_loop(
 
                     if decision == "decline_resume_after_stand":
                         print("사용자가 재시작을 거부하여 측정을 종료함.")
-                        if buzzer:
-                            buzzer.reset()
                         return {
                             "result": "stand_declined",
                             "score_sum": score_sum,
@@ -282,8 +275,6 @@ def run_measurement_loop(
 
                     if decision == "quit_measurement":
                         print("STAND 이후 사용자가 측정 종료를 요청함.")
-                        if buzzer:
-                            buzzer.reset()
                         return {
                             "result": "quit",
                             "score_sum": score_sum,
@@ -424,9 +415,6 @@ def run_measurement_loop(
             )
             latest_state = state
 
-            if state["alert"]:
-                audio.play_posture_alert(predicted)
-
             metrics = build_monitoring_metrics(feature_map, baseline)
 
             score_sum += state["score"]
@@ -461,6 +449,7 @@ def run_measurement_loop(
                 raw_packet=raw_packet,
                 feature_map=feature_map,
                 semantic_packet=semantic_packet,
+                baseline=baseline,
             )
 
             app_server.update_status(distribution_payload)
@@ -471,11 +460,6 @@ def run_measurement_loop(
                 print(json.dumps(distribution_payload, indent=2, ensure_ascii=False))
 
             active_flags = [k for k, v in flags.items() if v]
-
-            # normal 은 부저 활성 자세 목록에서 제외
-            active_bad_postures = {k for k, v in flags.items() if v and k != "normal"}
-            if buzzer:
-                buzzer.update(active_bad_postures)
 
             if DEBUG_FLAGS and sample_index % DEBUG_SUMMARY_EVERY_N == 0:
                 print(
@@ -527,5 +511,4 @@ def run_measurement_loop(
             )
 
     finally:
-        if buzzer:
-            buzzer.close()
+        pass

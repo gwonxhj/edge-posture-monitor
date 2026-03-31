@@ -22,8 +22,6 @@ from src.session.session_manager import SessionManager
 from src.storage.database_manager import DatabaseManager
 from src.storage.sample_logger import SampleLogger
 
-from src.feedback.audio_feedback import AudioFeedback
-
 from src.report.report_generator import ReportGenerator
 from src.report.report_service import ReportService
 
@@ -222,7 +220,6 @@ def main():
 
     classifier = PostureClassifier()
     score_engine = PostureScoreEngine(sample_rate_hz=SAMPLE_RATE_HZ)
-    audio = AudioFeedback()
     report_gen = ReportGenerator()
 
     runtime_context = {
@@ -348,7 +345,6 @@ def main():
                 session_manager=session_manager,
                 db_manager=db_manager,
                 report_gen=report_gen,
-                audio=audio,
                 current_profile=current_profile,
                 baseline=baseline,
                 session_id=session_id,

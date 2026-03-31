@@ -2,18 +2,27 @@
 
 import time
 
+_HEAD_DISPLAY_PREV = {
+    "left_min": 0.0,
+    "left_max": 0.0,
+    "left_mean": 0.0,
+    "right_min": 0.0,
+    "right_max": 0.0,
+    "right_mean": 0.0,
+    "overall_percent": 0,
+}
+
+_HEAD_DISPLAY_INVALID_STREAK = 0
+HEAD_DISPLAY_MAX_HOLD_FRAMES = 25
+HEAD_VALID_MIN_MM = 80
+HEAD_VALID_MAX_MM = 1200
+HEAD_MIN_VALID_POINTS_FOR_DISPLAY = 6
 
 def _clamp(value, min_value=0, max_value=100):
     return max(min_value, min(max_value, value))
 
 
 def _level_from_percent(percent: int) -> str:
-    """
-    앱 색상 표시용 상태값
-    - good    : 양호
-    - caution : 주의
-    - danger  : 위험
-    """
     if percent >= 80:
         return "good"
     if percent >= 40:
@@ -29,11 +38,6 @@ def _safe_round(value, digits=3):
 
 
 def _normalize_group_to_percent(values):
-    """
-    그룹 내부 상대값 기준 0~100 퍼센트로 정규화.
-    현재는 UI 표시용 임시 정규화 방식.
-    실측/보정 완료 후 절대 기준으로 교체 가능.
-    """
     if not values:
         return []
 
@@ -127,6 +131,65 @@ def build_meta_payload(stage, extra=None):
     return payload
 
 
+def build_debug_sensor_payload(user_id, raw_packet, semantic_packet, feature_map, delta_map=None):
+    tof_3d = raw_packet.get("tof_3d", [])
+    loadcell = raw_packet.get("loadcell", [])
+    mpu = raw_packet.get("mpu", [])
+    delta_map = delta_map or {}
+
+    return {
+        "type": "debug_sensor",
+        "user_id": user_id,
+        "timestamp": int(time.time()),
+        "raw": {
+            "loadcell_sum": sum(loadcell),
+            "tof_1d": raw_packet.get("tof_1d", []),
+            "tof_3d_min": min(tof_3d) if tof_3d else 0,
+            "tof_3d_max": max(tof_3d) if tof_3d else 0,
+            "tof_3d_mean": round(sum(tof_3d) / len(tof_3d), 3) if tof_3d else 0.0,
+            "mpu": mpu,
+        },
+        "semantic": {
+            "pitch_fused_deg": round(semantic_packet["imu"]["pitch_fused_deg"], 3),
+            "back_total": round(feature_map["back_total"], 3),
+            "seat_fb_shift": round(feature_map["seat_fb_shift"], 3),
+            "back_lr_diff": round(feature_map["back_lr_diff"], 3),
+            "seat_lr_diff": round(feature_map["seat_lr_diff"], 3),
+            "neck_mean": round(feature_map["neck_mean"], 3),
+            "neck_forward_delta": round(feature_map["neck_forward_delta"], 3),
+            "spine_curve": round(feature_map["spine_curve"], 3),
+        },
+        "delta": {
+            "seat_fb_shift_delta": round(delta_map.get("seat_fb_shift_delta", 0.0), 3),
+            "neck_mean_delta": round(delta_map.get("neck_mean_delta", 0.0), 3),
+            "neck_forward_delta_delta": round(delta_map.get("neck_forward_delta_delta", 0.0), 3),
+            "spine_curve_delta": round(delta_map.get("spine_curve_delta", 0.0), 3),
+            "pitch_fused_deg_delta": round(delta_map.get("pitch_fused_deg_delta", 0.0), 3),
+        },
+    }
+
+
+def _baseline_similarity_percent(current, baseline_val, danger_range):
+    """
+    baseline 대비 안정도를 0~100%로 반환.
+    current == baseline → 100%, 차이가 danger_range 이상 → 0%.
+    baseline이 0이고 current도 0이면 100% (변화 없음).
+    """
+    delta = abs(current - baseline_val)
+    if danger_range <= 0:
+        return 100 if delta == 0 else 0
+    score = 100 * (1 - delta / danger_range)
+    return int(_clamp(round(score)))
+
+
+def _sensor_match_percent(current, baseline_val):
+    c, b = abs(current), abs(baseline_val)
+    mx = max(c, b)
+    if mx < 0.5:
+        return 100
+    return int(_clamp(round(min(c, b) / mx * 100)))
+
+
 def build_sensor_distribution_payload(
     user_id,
     session_id,
@@ -134,22 +197,22 @@ def build_sensor_distribution_payload(
     raw_packet,
     feature_map,
     semantic_packet=None,
+    baseline=None,
 ):
     """
     앱 대시보드용 상세 센서 분포 payload
     - spine ToF는 semantic_packet의 정제/안정화 값 우선 사용
     - head ToF는 비정상 범위값을 제외하고 요약
+    - loadcell percent는 baseline 대비 안정도 (baseline=None이면 절대값 기준)
     """
     semantic_packet = semantic_packet or {}
+    baseline = baseline or {}
 
     loadcell = raw_packet.get("loadcell", [])
     tof_1d = raw_packet.get("tof_1d", [])
     tof_3d = raw_packet.get("tof_3d", [])
     mpu = raw_packet.get("mpu", [])
 
-    # -------------------------------------------------
-    # Loadcell raw unpack
-    # -------------------------------------------------
     back_right = loadcell[0:4] if len(loadcell) >= 4 else [0, 0, 0, 0]
     back_left = loadcell[4:8] if len(loadcell) >= 8 else [0, 0, 0, 0]
     seat_raw = loadcell[8:12] if len(loadcell) >= 12 else [0, 0, 0, 0]
@@ -164,7 +227,21 @@ def build_sensor_distribution_payload(
         back_right[2],
         back_right[3],
     ]
-    back_ui_percents = _normalize_group_to_percent(back_ui_values)
+
+    # baseline loadcell 개별 값 가져오기 (캘리브레이션 시 저장된 값)
+    bl_back = [
+        baseline.get("back_left_top_kg", 0.0),
+        baseline.get("back_left_upper_mid_kg", 0.0),
+        baseline.get("back_left_lower_mid_kg", 0.0),
+        baseline.get("back_left_bottom_kg", 0.0),
+        baseline.get("back_right_top_kg", 0.0),
+        baseline.get("back_right_upper_mid_kg", 0.0),
+        baseline.get("back_right_lower_mid_kg", 0.0),
+        baseline.get("back_right_bottom_kg", 0.0),
+    ]
+
+    # baseline 대비 매칭도로 percent 계산
+    back_ui_percents = [_sensor_match_percent(c, b) for c, b in zip(back_ui_values, bl_back)]
 
     seat_rear_right = seat_raw[0] if len(seat_raw) > 0 else 0
     seat_front_right = seat_raw[1] if len(seat_raw) > 1 else 0
@@ -177,11 +254,18 @@ def build_sensor_distribution_payload(
         seat_front_left,
         seat_front_right,
     ]
-    seat_ui_percents = _normalize_group_to_percent(seat_ui_values)
 
-    # -------------------------------------------------
-    # ToF
-    # -------------------------------------------------
+    bl_seat = [
+        baseline.get("seat_rear_left_kg", 0.0),
+        baseline.get("seat_rear_right_kg", 0.0),
+        baseline.get("seat_front_left_kg", 0.0),
+        baseline.get("seat_front_right_kg", 0.0),
+    ]
+
+    seat_ui_percents = [_sensor_match_percent(c, b)
+        for cur, base in zip(seat_ui_values, bl_seat)
+    ]
+
     def tof_mm_to_percent(mm_value):
         try:
             mm = float(mm_value)
@@ -191,7 +275,6 @@ def build_sensor_distribution_payload(
         percent = int(round((1000.0 - max(0.0, min(mm, 1000.0))) / 10.0))
         return _clamp(percent)
 
-    # spine는 semantic_packet의 안정화 값 우선 사용
     spine_sem = semantic_packet.get("tof", {}).get("spine", {})
 
     spine_upper = spine_sem.get(
@@ -218,7 +301,6 @@ def build_sensor_distribution_payload(
         tof_mm_to_percent(spine_lower),
     ]
 
-    # head 3D ToF는 비정상값 제거
     def _valid_head_values(arr):
         out = []
         for v in arr:
@@ -226,7 +308,7 @@ def build_sensor_distribution_payload(
                 fv = float(v)
             except Exception:
                 continue
-            if 80 <= fv <= 1200:
+            if HEAD_VALID_MIN_MM <= fv <= HEAD_VALID_MAX_MM:
                 out.append(fv)
         return out
 
@@ -235,31 +317,73 @@ def build_sensor_distribution_payload(
 
     left_tof3d = _valid_head_values(left_tof3d_raw)
     right_tof3d = _valid_head_values(right_tof3d_raw)
-    all_tof3d = left_tof3d + right_tof3d
 
     def safe_min(arr):
-        return min(arr) if arr else 0
+        return min(arr) if arr else 0.0
 
     def safe_max(arr):
-        return max(arr) if arr else 0
+        return max(arr) if arr else 0.0
 
     def safe_mean(arr):
         return round(sum(arr) / len(arr), 3) if arr else 0.0
 
-    head_overall_percent = tof_mm_to_percent(safe_min(all_tof3d))
+    left_valid = len(left_tof3d) >= HEAD_MIN_VALID_POINTS_FOR_DISPLAY
+    right_valid = len(right_tof3d) >= HEAD_MIN_VALID_POINTS_FOR_DISPLAY
 
-    # -------------------------------------------------
-    # IMU
-    # -------------------------------------------------
+    if left_valid:
+        left_min_mm = safe_min(left_tof3d)
+        left_max_mm = safe_max(left_tof3d)
+        left_mean_mm = safe_mean(left_tof3d)
+    else:
+        left_min_mm = _HEAD_DISPLAY_PREV["left_min"]
+        left_max_mm = _HEAD_DISPLAY_PREV["left_max"]
+        left_mean_mm = _HEAD_DISPLAY_PREV["left_mean"]
+
+    if right_valid:
+        right_min_mm = safe_min(right_tof3d)
+        right_max_mm = safe_max(right_tof3d)
+        right_mean_mm = safe_mean(right_tof3d)
+    else:
+        right_min_mm = _HEAD_DISPLAY_PREV["right_min"]
+        right_max_mm = _HEAD_DISPLAY_PREV["right_max"]
+        right_mean_mm = _HEAD_DISPLAY_PREV["right_mean"]
+
+    overall_candidates = [v for v in [left_min_mm, right_min_mm] if v > 0]
+
+    global _HEAD_DISPLAY_INVALID_STREAK
+
+    if overall_candidates:
+        head_overall_percent = tof_mm_to_percent(min(overall_candidates))
+        _HEAD_DISPLAY_INVALID_STREAK = 0
+    else:
+        _HEAD_DISPLAY_INVALID_STREAK += 1
+        if _HEAD_DISPLAY_INVALID_STREAK <= HEAD_DISPLAY_MAX_HOLD_FRAMES:
+            head_overall_percent = _HEAD_DISPLAY_PREV["overall_percent"]
+        else:
+            head_overall_percent = 0
+
+    if left_min_mm > 0:
+        _HEAD_DISPLAY_PREV["left_min"] = left_min_mm
+    if left_max_mm > 0:
+        _HEAD_DISPLAY_PREV["left_max"] = left_max_mm
+    if left_mean_mm > 0:
+        _HEAD_DISPLAY_PREV["left_mean"] = left_mean_mm
+
+    if right_min_mm > 0:
+        _HEAD_DISPLAY_PREV["right_min"] = right_min_mm
+    if right_max_mm > 0:
+        _HEAD_DISPLAY_PREV["right_max"] = right_max_mm
+    if right_mean_mm > 0:
+        _HEAD_DISPLAY_PREV["right_mean"] = right_mean_mm
+
+    _HEAD_DISPLAY_PREV["overall_percent"] = int(head_overall_percent)
+
     pitch_right = float(mpu[0]) if len(mpu) > 0 else 0.0
     pitch_left = float(mpu[1]) if len(mpu) > 1 else 0.0
     pitch_fused_deg = semantic_packet.get(
         "imu", {}
     ).get("pitch_fused_deg", feature_map.get("pitch_fused_deg", 0.0))
 
-    # -------------------------------------------------
-    # Summary
-    # -------------------------------------------------
     back_left_total_percent = int(round(sum(back_ui_percents[:4]) / 4)) if back_ui_percents else 0
     back_right_total_percent = int(round(sum(back_ui_percents[4:]) / 4)) if back_ui_percents else 0
 
@@ -333,14 +457,14 @@ def build_sensor_distribution_payload(
                 "level": _level_from_percent(int(head_overall_percent)),
             },
             "left_sensor": {
-                "min_mm": safe_min(left_tof3d),
-                "max_mm": safe_max(left_tof3d),
-                "mean_mm": safe_mean(left_tof3d),
+                "min_mm": _safe_round(left_min_mm, 3),
+                "max_mm": _safe_round(left_max_mm, 3),
+                "mean_mm": _safe_round(left_mean_mm, 3),
             },
             "right_sensor": {
-                "min_mm": safe_min(right_tof3d),
-                "max_mm": safe_max(right_tof3d),
-                "mean_mm": safe_mean(right_tof3d),
+                "min_mm": _safe_round(right_min_mm, 3),
+                "max_mm": _safe_round(right_max_mm, 3),
+                "mean_mm": _safe_round(right_mean_mm, 3),
             },
         },
 

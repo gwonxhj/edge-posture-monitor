@@ -1,12 +1,6 @@
 from copy import deepcopy
-from typing import Any
 
-from src.config.settings import (
-    FACTOR_ENABLE,
-    LOADCELL_FACTORS,
-    TOF_1D_FACTORS,
-    TOF_3D_FACTORS,
-)
+from src.config.settings import FACTOR_ENABLE, LOADCELL_CALIBRATION
 
 
 LOADCELL_ORDER = [
@@ -24,76 +18,71 @@ LOADCELL_ORDER = [
     "seat_front_left",
 ]
 
-TOF_1D_ORDER = [
-    "spine_upper",
-    "spine_upper_mid",
-    "spine_lower_mid",
-    "spine_lower",
-]
 
-
-def _safe_apply_factor(value: Any, factor: float):
-    try:
-        return type(value)(round(float(value) * float(factor)))
-    except Exception:
-        return value
-
-
-def apply_sensor_factors(raw_packet: dict) -> dict:
+def convert_loadcell_to_kg(raw_value, count_per_kg, noise_floor_kg=0.05):
     """
-    raw_packet에 센서별 factor를 적용한 새 dict를 반환한다.
+    STM32에서 이미 tare(offset 차감)된 HX711 값을 kg 단위로 변환한다.
 
-    현재는 factor 구조만 먼저 반영하는 단계이므로,
-    settings.py 기본값을 모두 1.0으로 두면 기존 동작과 동일하다.
+    STM32가 부팅 시 HX711_Init()에서 무하중 offset을 측정하고,
+    매 샘플마다 (raw - hx711_offset) 값을 전송하므로,
+    RPi에서는 추가 offset 차감 없이 count_per_kg로 나누기만 하면 된다.
+
+    스트레인 게이지 장착 방향에 따라 하중 시 음수 delta가 나올 수 있으므로
+    abs()로 크기만 사용한다. (offset 제거 후이므로 안전)
+
+    - raw_value: STM32에서 수신한 값 (이미 tare 완료)
+    - count_per_kg: ADC count / kg 비율
+    - noise_floor_kg: 이 값 미만은 노이즈로 간주하여 0 처리
+    """
+    if not count_per_kg:
+        return 0.0
+
+    weight_kg = abs(raw_value) / count_per_kg
+
+    if weight_kg < noise_floor_kg:
+        return 0.0
+
+    return round(weight_kg, 4)
+
+
+def apply_sensor_factors(raw_packet: dict, debug=False) -> dict:
+    """
+    raw_packet에 센서 보정을 적용한 새 dict를 반환한다.
+
+    현재는 loadcell만 실제 calibration(offset/count_per_kg) 기반으로 변환하고,
+    ToF / MPU는 기존 값을 그대로 유지한다.
     """
     if not FACTOR_ENABLE:
         return raw_packet
 
     corrected = deepcopy(raw_packet)
 
-    # -------------------------------------------------
-    # Loadcell factor 적용
-    # -------------------------------------------------
     loadcell = corrected.get("loadcell", [])
     if isinstance(loadcell, list) and loadcell:
         new_loadcell = []
         for idx, value in enumerate(loadcell):
             if idx < len(LOADCELL_ORDER):
                 key = LOADCELL_ORDER[idx]
-                factor = LOADCELL_FACTORS.get(key, 1.0)
+                calib = LOADCELL_CALIBRATION.get(key, {})
+                count_per_kg = calib.get("count_per_kg", 1.0)
+                converted = convert_loadcell_to_kg(
+                    raw_value=value,
+                    count_per_kg=count_per_kg,
+                )
+
+                if debug:
+                    print(
+                        f"  [{idx}] {key}: "
+                        f"stm32_raw={value}  "
+                        f"abs={abs(value)}  "
+                        f"count_per_kg={count_per_kg}  "
+                        f"kg={converted}"
+                    )
             else:
-                factor = 1.0
-            new_loadcell.append(_safe_apply_factor(value, factor))
+                converted = value
+
+            new_loadcell.append(converted)
+
         corrected["loadcell"] = new_loadcell
-
-    # -------------------------------------------------
-    # 1D ToF factor 적용
-    # -------------------------------------------------
-    tof_1d = corrected.get("tof_1d", [])
-    if isinstance(tof_1d, list) and tof_1d:
-        new_tof_1d = []
-        for idx, value in enumerate(tof_1d):
-            if idx < len(TOF_1D_ORDER):
-                key = TOF_1D_ORDER[idx]
-                factor = TOF_1D_FACTORS.get(key, 1.0)
-            else:
-                factor = 1.0
-            new_tof_1d.append(_safe_apply_factor(value, factor))
-        corrected["tof_1d"] = new_tof_1d
-
-    # -------------------------------------------------
-    # 3D ToF factor 적용
-    # 앞 16개 = left_sensor, 뒤 16개 = right_sensor 로 가정
-    # -------------------------------------------------
-    tof_3d = corrected.get("tof_3d", [])
-    if isinstance(tof_3d, list) and tof_3d:
-        left_factor = TOF_3D_FACTORS.get("left_sensor", 1.0)
-        right_factor = TOF_3D_FACTORS.get("right_sensor", 1.0)
-
-        new_tof_3d = []
-        for idx, value in enumerate(tof_3d):
-            factor = left_factor if idx < 16 else right_factor
-            new_tof_3d.append(_safe_apply_factor(value, factor))
-        corrected["tof_3d"] = new_tof_3d
 
     return corrected

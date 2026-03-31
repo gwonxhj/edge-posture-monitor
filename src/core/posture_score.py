@@ -10,25 +10,25 @@ POSTURE_BASE_WEIGHT = {
 }
 
 POSTURE_ALERT_THRESHOLD_SEC = {
-    "turtle_neck": 20,
-    "forward_lean": 20,
-    "reclined": 30,
-    "side_slouch": 15,
-    "leg_cross_suspect": 30,
-    "thinking_pose": 15,
-    "perching": 12,
+    "turtle_neck": 10,
+    "forward_lean": 10,
+    "reclined": 15,
+    "side_slouch": 8,
+    "leg_cross_suspect": 15,
+    "thinking_pose": 10,
+    "perching": 8,
 }
 
 # 이상 자세가 유지될 때 초당 기본 차감량
 POSTURE_DECAY_PER_SEC = {
     "normal": 0.0,
-    "turtle_neck": 0.12,
-    "forward_lean": 0.14,
-    "reclined": 0.06,
-    "side_slouch": 0.16,
-    "leg_cross_suspect": 0.05,
-    "thinking_pose": 0.08,
-    "perching": 0.18,
+    "turtle_neck": 0.25,
+    "forward_lean": 0.30,
+    "reclined": 0.12,
+    "side_slouch": 0.30,
+    "leg_cross_suspect": 0.10,
+    "thinking_pose": 0.15,
+    "perching": 0.35,
 }
 
 
@@ -87,6 +87,11 @@ class PostureScoreEngine:
 
         alert = False
         penalty_applied = 0.0
+
+        # 0) 정자세 유지 시 점수 회복 (초당 +0.05, 최대 100)
+        if posture == "normal" and self.score < 100.0:
+            recovery = 0.05 * (step_samples / self.sample_rate_hz)
+            self.score = min(100.0, self.score + recovery)
 
         # 1) 이상 자세일 때는 매 샘플마다 소량 감점
         if posture != "normal":

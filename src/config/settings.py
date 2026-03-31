@@ -31,7 +31,7 @@ DEBUG_FLAGS = os.getenv("POSTURE_DEBUG_FLAGS", "0") == "1"
 DEBUG_SENSOR_RAW = os.getenv("POSTURE_DEBUG_SENSOR_RAW", "0") == "1"
 DEBUG_SUMMARY_EVERY_N = max(1, int(os.getenv("POSTURE_DEBUG_SUMMARY_EVERY_N", "50")))
 ENABLE_SAMPLE_LOGGER = os.getenv("POSTURE_ENABLE_SAMPLE_LOGGER", "1") == "1"
-
+DEBUG_SENSOR_DISTRIBUTION = os.getenv("POSTURE_DEBUG_SENSOR_DIST", "0") == "1"
 
 # -----------------------------
 # Report / Future extension
@@ -39,17 +39,17 @@ ENABLE_SAMPLE_LOGGER = os.getenv("POSTURE_ENABLE_SAMPLE_LOGGER", "1") == "1"
 REPORT_ENGINE = os.getenv("POSTURE_REPORT_ENGINE", "rule")
 LLM_REPORT_MODE = os.getenv("POSTURE_LLM_REPORT_MODE", "mock")
 LLM_MODEL_BACKEND = os.getenv("POSTURE_LLM_MODEL_BACKEND", "llama_cpp")
-LLM_GGUF_MODEL_PATH = os.getenv("POSTURE_LLM_GGUF_MODEL_PATH", "")
+LLM_GGUF_MODEL_PATH = os.getenv("POSTURE_LLM_GGUF_MODEL_PATH", "models/llm/qwen2.5-0.5b-instruct-q4_k_m.gguf")
 LLM_CONTEXT_LEN = int(os.getenv("POSTURE_LLM_CONTEXT_LEN", "2048"))
-LLM_MAX_TOKENS = int(os.getenv("POSTURE_LLM_MAX_TOKENS", "256"))
+LLM_MAX_TOKENS = int(os.getenv("POSTURE_LLM_MAX_TOKENS", "512"))
 LLM_TEMPERATURE = float(os.getenv("POSTURE_LLM_TEMPERATURE", "0.2"))
 # REPORT_ENGINE:
 # - "rule": 기존 rule-based 리포트
-# - "llm" : LLM-ready 리포트 엔진
+# - "llm" : LLM 리포트 엔진 (llama-cpp-python)
 #
 # LLM_REPORT_MODE:
-# - "mock": 실제 LLM 호출 없이 mock LLM 형태로 동작
-# 향후 OpenAI / local LLM 연결 시 여기서 모드 확장 가능
+# - "mock": 실제 LLM 호출 없이 rule-based fallback
+# - "live": llama-cpp-python으로 실제 GGUF 모델 추론
 
 # -----------------------------
 # Classifier behavior
@@ -57,62 +57,11 @@ LLM_TEMPERATURE = float(os.getenv("POSTURE_LLM_TEMPERATURE", "0.2"))
 CLASSIFIER_FALLBACK_TO_RULE = True
 
 # -----------------------------
-# Buzzer Feedback Settings
-# -----------------------------
-
-BUZZER_ENABLE = os.getenv("POSTURE_BUZZER_ENABLE", "0") == "1"
-
-# 최초 감지 후 알람 시작까지 대기 시간 (초)
-BUZZER_INITIAL_DELAY_SEC = float(
-    os.getenv("POSTURE_BUZZER_INITIAL_DELAY_SEC", "5.0")
-)
-
-# stage별 기본 interval (초)
-BUZZER_STAGE1_INTERVAL = float(
-    os.getenv("POSTURE_BUZZER_STAGE1_INTERVAL", "5.0")
-)
-BUZZER_STAGE2_INTERVAL = float(
-    os.getenv("POSTURE_BUZZER_STAGE2_INTERVAL", "3.0")
-)
-BUZZER_STAGE3_INTERVAL = float(
-    os.getenv("POSTURE_BUZZER_STAGE3_INTERVAL", "1.5")
-)
-
-# posture 개수 증가 시 가속 계수
-BUZZER_MULTI_POSTURE_FACTOR = float(
-    os.getenv("POSTURE_BUZZER_MULTI_POSTURE_FACTOR", "0.3")
-)
-
-# posture 위험도 weight
-BUZZER_WEIGHT_MAP = {
-    "turtle_neck": 1.0,
-    "forward_lean": 1.2,
-    "side_slouch": 1.1,
-    "perching": 1.3,
-    "leg_cross_suspect": 1.15,
-    "thinking_pose": 1.05,
-    "reclined": 1.1,
-}
-
-# -----------------------------
 # Sensor Factor Settings
 # -----------------------------
-FACTOR_ENABLE = os.getenv("POSTURE_FACTOR_ENABLE", "1") == "1"
+# 추후 필요 시 *_OFFSETS 구조도 추가 가능
 
-LOADCELL_FACTORS = {
-    "back_right_top": 1.0,
-    "back_right_upper_mid": 1.0,
-    "back_right_lower_mid": 1.0,
-    "back_right_bottom": 1.0,
-    "back_left_top": 1.0,
-    "back_left_upper_mid": 1.0,
-    "back_left_lower_mid": 1.0,
-    "back_left_bottom": 1.0,
-    "seat_rear_right": 1.0,
-    "seat_front_right": 1.0,
-    "seat_rear_left": 1.0,
-    "seat_front_left": 1.0,
-}
+FACTOR_ENABLE = os.getenv("POSTURE_FACTOR_ENABLE", "1") == "1"
 
 TOF_1D_FACTORS = {
     "spine_upper": 1.0,
@@ -124,4 +73,58 @@ TOF_1D_FACTORS = {
 TOF_3D_FACTORS = {
     "left_sensor": 1.0,
     "right_sensor": 1.0,
+}
+
+# -----------------------------
+# Loadcell Calibration Settings
+# -----------------------------
+LOADCELL_CALIBRATION = {
+    "back_right_top": {
+        "offset": -37382,
+        "count_per_kg": 26494.80,
+    },
+    "back_right_upper_mid": {
+        "offset": 382921,
+        "count_per_kg": 17730.19,
+    },
+    "back_right_lower_mid": {
+        "offset": -49580,
+        "count_per_kg": 28652.59,
+    },
+    "back_right_bottom": {
+        "offset": -381543,
+        "count_per_kg": 37188.80,
+    },
+    "back_left_top": {
+        "offset": 579756,
+        "count_per_kg": 19373.19,
+    },
+    "back_left_upper_mid": {
+        "offset": 212781,
+        "count_per_kg": 25634.00,
+    },
+    "back_left_lower_mid": {
+        "offset": -437696,
+        "count_per_kg": 21877.00,
+    },
+    "back_left_bottom": {
+        "offset": 14766,
+        "count_per_kg": 16290.20,
+    },
+    "seat_rear_right": {
+        "offset": 145829,
+        "count_per_kg": 45788.60,
+    },
+    "seat_front_right": {
+        "offset": 1207776,
+        "count_per_kg": 45302.19,
+    },
+    "seat_rear_left": {
+        "offset": 470425,
+        "count_per_kg": 46565.19,
+    },
+    "seat_front_left": {
+        "offset": 145837,
+        "count_per_kg": 47868.19,
+    },
 }

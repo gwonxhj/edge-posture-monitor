@@ -1,7 +1,7 @@
 # src/communication/uart_protocol.py
 
 BAUD_RATE = 921600
-SERIAL_PORT = "/dev/serial0"
+SERIAL_PORT = "/dev/ttyAMA3"
 
 # -------------------------------------------------------------------
 # Binary sensor stream contract
