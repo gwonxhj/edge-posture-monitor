@@ -87,7 +87,7 @@ Loadcell 데이터는 총 12개 채널로 구성된다.
 - 10 = seat_rear_left의 최종 채널값
 - 11 = seat_front_left의 최종 채널값
 
-RPi는 좌판 채널에 대해 추가 pair 결합을 수행하지 않는다.
+STM32는 raw count 값을 전송하며, RPi에서 count_per_kg를 이용해 kg 단위로 변환한다.
 
 ---
 

@@ -31,7 +31,7 @@ Example Request
 `curl http://127.0.0.1:8000/health`
 
 Example Response
-```text
+```json
 {
   "ok": true,
   "service": "posture_rpi",
@@ -65,7 +65,7 @@ Example Request
 `curl http://127.0.0.1:8000/meta`
 
 Example Response
-```text
+```json
 {
   "type": "meta",
   "connected": true,
@@ -103,7 +103,7 @@ Content-Type
 `application/json`
 
 Example Success Response
-```text
+```json
 {
   "ok": true,
   "accepted": true,
@@ -113,17 +113,17 @@ Example Success Response
 ```
 
 Example Error Response
-```text
+```json
 {
   "ok": false,
   "accepted": false,
   "error": "missing_cmd",
-  "stage": "uart_link_ready"
+  "allowed_stage": "wait_start_decision"
 }
 ```
 
 Example Invalid Stage Response
-```text
+```json
 {
   "ok": false,
   "accepted": false,
@@ -145,7 +145,7 @@ Field Description
 5-1. Submit Profile
 
 새 사용자 프로필 등록
-```text
+```json
 {
   "cmd": "submit_profile",
   "user_id": "user_001",
@@ -391,7 +391,7 @@ Endpoint
 실시간 자세 상태 데이터
 
 Example
-```text
+```json
 {
   "type": "realtime_status",
   "user_id": "user_001",
@@ -432,7 +432,7 @@ Example
 ```
 
 주의
-- posture.dominant는 실시간 classifier 출력 기준 자세이다.
+- posture.dominant는 rule-based 보정이 적용된 최종 실시간 자세이다.
 - 최종 리포트에서 사용하는 대표 자세는 rule-based flag 보정 결과와 다를 수 있다.
 - 앱에서는 posture.dominant와 posture.flags를 함께 사용하는 것을 권장한다.
 
@@ -449,7 +449,7 @@ Example
 - 이 상태에서는 resume_after_stand, decline_resume_after_stand, quit_measurement 중 하나를 보낼 수 있다.
 
 Example
-```text
+```json
 {
   "type": "stand_event",
   "user_id": "user_001",
@@ -469,7 +469,7 @@ Example
 분 단위 요약 데이터
 
 Example
-```text
+```json
 {
   "type": "minute_summary",
   "user_id": "user_001",
@@ -490,7 +490,7 @@ Example
 세션 종료 후 전체 요약 데이터
 
 Example
-```text
+```json
 {
   "type": "overall_summary",
   "user_id": "user_001",
@@ -518,10 +518,10 @@ Example
 
 ## 10-A. Enhanced Report Payload
 
-세션 종료 후 rule-based 또는 향후 LLM 기반으로 생성되는 해석형 리포트 데이터
+세션 종료 후 LLM 기반으로 생성되며, 필요 시 규칙 기반 대체 경로를 사용하는 해석형 리포트 데이터
 
 Example
-```text
+```json
 {
   "type": "enhanced_report",
   "user_id": "user_001",
@@ -530,10 +530,11 @@ Example
     "summary_text": "전체 평균 점수는 100.0점으로 우수 수준입니다. 주요 자세는 forward_lean이며, 나쁜 자세 비율은 100.0%입니다.",
     "trend_text": "측정 전반에서 forward_lean 자세가 지속되었습니다.",
     "exercise_recommendations": [
-      "허리 신전 스트레칭",
-      "플랭크",
-      "고관절 스트레칭"
-    ]
+      "허리 신전 스트레칭 - 상체를 천천히 들어 올려 허리 전면을 이완",
+      "플랭크 - 코어 안정성을 높이기 위해 30초씩 반복",
+      "고관절 스트레칭 - 장시간 앉은 자세로 굳은 고관절을 이완"
+    ],
+    "summary": "상체 전방 기울기 자세가 반복적으로 관찰되어 허리와 고관절 중심의 교정이 필요합니다."
   }
 }
 ```
@@ -545,6 +546,7 @@ Field Description
 - data.summary_text: 전체 요약 문장
 - data.trend_text: 자세 추이 설명
 - data.exercise_recommendations: 추천 운동 리스트
+- data.summary: 생활 습관 개선 및 종합 조언 요약
 
 ⸻
 

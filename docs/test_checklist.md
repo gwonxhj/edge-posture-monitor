@@ -1,78 +1,31 @@
-# POSTURE AI Test Checklist
+# Validation Summary
 
-## 1. UART Communication
+## Mock Validation
+- UART handshake 검증 완료
+- 센서 스트림 파이프라인 검증 완료
+- rule-based posture decision 정상 동작
 
-| Test | Result |
-|-----|-------|
-| UART READY handshake | ✔ |
-| LINK_OK response | ✔ |
-| command transmission | ✔ |
+## Calibration Flow
+- baseline 계산 및 저장 정상 동작
 
----
+## Runtime Flow
+- start / pause / resume 정상 동작
 
-# 2. Calibration Flow
+## Stand Event Handling
+- stand detection 및 resume/quit 흐름 정상 동작
 
-| Test | Result |
-|-----|-------|
-| calibration start command | ✔ |
-| baseline calculation | ✔ |
-| baseline DB save | ✔ |
+## Report Generation
+- minute / session / daily report 생성 검증 완료
+- enhanced report (LLM + fallback) 생성 검증 완료
 
----
+## Database Persistence
+- users / baselines / sessions 저장 확인
+- minute_reports / daily_reports 저장 확인
+- enhanced_reports 저장 확인
 
-# 3. Measurement Flow
+## Real Hardware Integration
+- STM32 UART 연동 및 실시간 데이터 처리 검증 완료
 
-| Test | Result |
-|-----|-------|
-| start measurement | ✔ |
-| sensor stream reception | ✔ |
-| posture classification | ✔ |
-| pause measurement | ✔ |
-| resume measurement | ✔ |
-
----
-
-# 4. Stand Detection
-
-| Test | Result |
-|-----|-------|
-| stand event detection | ✔ |
-| resume request | ✔ |
-| decline resume | ✔ |
-| quit measurement | ✔ |
-
----
-
-# 5. Report Generation
-
-| Test | Result |
-|-----|-------|
-| minute report generation | ✔ |
-| session summary generation | ✔ |
-| daily report aggregation | ✔ |
-
----
-
-# 6. Database Validation
-
-| Table | Check |
-|------|------|
-| users | user creation |
-| baselines | calibration history |
-| sessions | session start / end |
-| minute_reports | minute aggregation |
-| daily_reports | daily aggregation |
-
----
-
-# 7. Mock Testing
-
-Mock STM32 환경에서 전체 시스템을 검증하였다.
-
-테스트 항목
-
-- fake sensor stream
-- stand event simulation
-- measurement resume
-- report generation
-- DB persistence
+## End-to-End Validation
+Mock STM32 환경과 실제 STM32 하드웨어 연동 환경 모두에서
+End-to-End 자세 분석 및 리포트 생성 흐름을 검증하였다.

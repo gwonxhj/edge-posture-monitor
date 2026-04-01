@@ -26,145 +26,146 @@ Rule-based classification 방식을 사용한다.
 
 # 2. Feature Extraction
 
-센서 데이터로부터 다음 특징(feature)을 계산한다.
+본 시스템은 센서 raw 값을 직접 사용하지 않고,  
+사용자별 baseline 대비 변화량(delta) 기반 feature를 생성한다.
 
-### 2.1 Pressure Balance
+## Feature Calculation Rule
 
-좌석 하중 분포를 이용하여 좌우 균형을 계산한다.
-`pressure_balance = left_pressure / right_pressure`
-이 값이 일정 범위를 벗어나면 자세가 한쪽으로 기울어진 것으로 판단한다.
-
----
-
-### 2.2 Neck Distance
-
-ToF 센서를 이용하여 목과 센서 사이의 거리를 측정한다.
-
-거리가 증가하면 사용자가 고개를 앞으로 내민 것으로 판단한다.
-`neck_distance > threshold → turtle_neck`
-
----
-
-### 2.3 Spine Distance
-
-척추 방향 ToF 센서를 이용하여 상체 기울기를 판단한다.
-`spine_distance > threshold → forward_lean`
-
----
-
-### 2.4 Upper Body Tilt
-
-IMU 센서를 이용하여 상체 기울기를 계산한다.
-`tilt_angle > threshold → reclined`
-
----
-
-# 3. Posture Classification
-
-자세 분류는 rule-based classifier로 수행된다.
-
-각 센서 feature를 기준으로 posture label을 결정한다.
-
-예시 로직
+각 feature는 다음과 같이 baseline 대비 변화량으로 계산된다.
 ```text
-if neck_distance > neck_threshold:
-posture = “turtle_neck”
-
-elif spine_distance > spine_threshold:
-posture = “forward_lean”
-
-elif pressure_balance outside normal range:
-posture = “side_slouch”
-
-elif tilt_angle > tilt_threshold:
-posture = “reclined”
-
-else:
-posture = “normal”
+feature_delta = current_feature_value - baseline_feature_value
 ```
 
----
-
-# 4. Supported Posture Labels
-
-시스템은 다음 자세 유형을 분류한다.
-
-| Posture | Description |
-|------|-------------|
-| normal | 정상 자세 |
-| turtle_neck | 거북목 |
-| forward_lean | 상체 굽힘 |
-| reclined | 기대앉기 |
-| side_slouch | 측면 기울어짐 |
-| leg_cross_suspect | 다리 꼬기 의심 |
-| thinking_pose | 턱 괴기 |
-| perching | 걸터앉기 |
-
----
-
-# 5. Posture Score Calculation
-
-각 자세는 점수 시스템으로 평가된다.
-
-예시 기준
-
-| Posture | Score |
-|------|------|
-| normal | 100 |
-| turtle_neck | 60 |
-| forward_lean | 50 |
-| reclined | 40 |
-| side_slouch | 40 |
-
-세션 동안 평균 점수를 계산하여 자세 리포트를 생성한다.
-
----
-
-# 6. Future Extension
-
-현재 시스템은 rule-based classification을 사용하지만  
-향후 다음과 같은 방식으로 확장할 수 있다.
-
-### Machine Learning Based Classification
+일부 feature는 비율 형태로 계산된다.
 ```text
-sensor data
-↓
-feature extraction
-↓
-ML model (RandomForest / CNN)
-↓
-posture classification
+ratio_feature = current_value / baseline_value
 ```
 
-### LLM-based Feedback System
+이러한 방식으로 사용자 체형 및 착석 습관에 따른 편차를 제거한다.
 
-LLM을 활용하여 사용자 자세 패턴을 분석하고  
-맞춤형 자세 교정 피드백을 제공할 수 있다.
+## 주요 feature 목록
 
-예
-```text
-posture history
-↓
-LLM analysis
-↓
-personalized posture recommendation
-```
+센서 데이터로부터 다음과 같은 특징값을 계산한다.
+
+- `back_lr_diff`: 등받이 좌우 하중 불균형 정도
+- `back_upper_lower_ratio`: 등판 상부/하부 하중 비율
+- `seat_lr_diff`: 좌판 좌우 하중 불균형 정도
+- `seat_fb_shift`: 좌판 전후 하중 이동 정도
+- `neck_mean`: 머리/목 영역 ToF 평균 거리
+- `neck_forward_delta`: 목 평균 거리와 척추 중간 거리 차이
+- `spine_curve`: 척추 상단과 하단 거리 차이
+- `spine_variation`: 척추 구간별 거리 변화량
+- `pitch_fused_deg`: 좌우 기울기 센서 평균값
+- `pitch_lr_diff_deg`: 좌우 기울기 차이
+
+---
+
+# 3. Baseline-relative Interpretation
+
+모든 feature는 절대값이 아닌,  
+**사용자별 baseline 대비 변화량(delta)** 기준으로 해석된다.
+
+예:
+
+- neck_forward_delta ↑ → 거북목 증가
+- seat_fb_shift ↑ → 상체 전방 이동
+- back_total ↓ → 등받이 접촉 감소
+
+이 구조는 사용자 체형 차이를 제거하기 위해 설계되었다.
+
+---
+
+# 4. Rule-based Posture Decision
+
+자세 판별은 단일 threshold 기반이 아닌  
+**feature 조합 기반 rule engine**으로 수행된다.
+
+Rule-based posture decision은 시스템의 최종 판단 기준이며,
+ML classifier 결과보다 우선적으로 적용된다.
+
+## 주요 posture 판별 기준
+
+### turtle_neck
+- neck_forward_delta 증가
+- neck_mean 증가
+
+---
+
+### forward_lean
+- seat_fb_shift 증가
+- spine_curve 증가
+- pitch_fused_deg 증가
+
+---
+
+### reclined
+- pitch_fused_deg 감소 (뒤로 기울기)
+- back_total 증가
+
+---
+
+### side_slouch
+- back_lr_diff 증가
+- seat_lr_diff 증가
+
+---
+
+### leg_cross_suspect
+- seat_lr_diff 증가
+- back_lr_diff는 상대적으로 작음
+
+---
+
+### perching
+- seat_front 집중 증가
+- back_total 감소
+- pitch 증가
+
+---
+
+### thinking_pose
+- neck_forward_delta + 약한 forward_lean 조합
+
+---
+
+### normal
+- 위 조건에 해당하지 않는 경우
+
+---
+
+# 5. Final Posture Selection
+
+최종 자세는 다음 순서로 결정된다.
+
+1. optional ML classifier (RandomForest 기반, 보조적 사용)
+2. rule-based posture flags 생성
+3. rule 기반 보정 적용
+4. 최종 report posture 결정
+
+---
+
+# 6. Posture Score Calculation
+
+점수는 고정 점수표가 아닌  
+**시간 기반 penalty 시스템**으로 계산된다.
+
+- posture 지속 시간 기반 감점
+- 최초 threshold 도달 시 추가 감점
+- 일정 시간 유지 시 누적 감점
+- normal 자세 시 점수 회복
 
 ---
 
 # 7. Summary
 
-현재 posture classification은 다음 방식으로 수행된다.
 ```text
 sensor input
 ↓
-feature extraction
+feature extraction (baseline-relative)
 ↓
-rule-based classification
+rule-based posture decision
 ↓
-posture score calculation
+time-based scoring
 ↓
 report generation
 ```
-이 구조는 Edge 환경에서의 낮은 지연시간과  
-안정적인 동작을 목표로 설계되었다.
