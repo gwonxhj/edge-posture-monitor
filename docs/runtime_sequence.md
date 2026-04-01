@@ -31,14 +31,14 @@ sequenceDiagram
         STM32 -->> RPi: DAT packet
 
         RPi ->> RPi: parse_sensor_packet
+        RPi ->> RPi: apply_sensor_factors
         RPi ->> RPi: map_raw_packet
         RPi ->> RPi: extract_features
-        RPi ->> RPi: classifier.predict
         RPi ->> RPi: detect_posture_flags
+        RPi ->> RPi: select_report_posture
         RPi ->> RPi: score_engine.update
         RPi ->> RPi: report_generator.add_sample
-
-        RPi -->> App: realtime status (WebSocket)
+        RPi -->> App: realtime_status / sensor_distribution
     end
 ```
 
@@ -117,13 +117,14 @@ sequenceDiagram
 ```mermaid
 flowchart TD
     A[DAT Packet] --> B[parse_sensor_packet]
-    B --> C[map_raw_packet]
-    C --> D[extract_features]
-    D --> E[classifier.predict]
+    B --> C[apply_sensor_factors]
+    C --> D[map_raw_packet]
+    D --> E[extract_features]
     E --> F[detect_posture_flags]
-    F --> G[score_engine.update]
-    G --> H[report_generator.add_sample]
-    H --> I[app_server.update_status]
+    F --> G[select_report_posture]
+    G --> H[score_engine.update]
+    H --> I[report_generator.add_sample]
+    I --> J[app_server.update_status]
 ```
 
 ---
@@ -134,11 +135,19 @@ flowchart TD
 
 시스템은 다음 상태를 기반으로 동작한다.
 
-- WAIT_SIT
-- CALIBRATING
-- MEASURING
-- PAUSED
-- WAIT_RESTART_DECISION
+- `uart_link_ready`
+- `profile_loaded`
+- `wait_calibration_decision`
+- `wait_sit_for_calibration`
+- `calibrating`
+- `calibration_completed`
+- `wait_start_decision`
+- `wait_sit_for_measure`
+- `measuring`
+- `paused`
+- `wait_restart_decision`
+- `measurement_stop_requested`
+- `session_saved`
 
 ## 통신 구조
 
